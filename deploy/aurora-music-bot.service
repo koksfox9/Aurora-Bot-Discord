@@ -1,0 +1,23 @@
+[Unit]
+Description=Aurora Music Discord Bot
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=daniel
+WorkingDirectory=/home/daniel/aurora-music-bot
+Environment=NODE_ENV=production
+ExecStart=/usr/local/bin/node /home/daniel/aurora-music-bot/dist/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
