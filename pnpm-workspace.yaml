@@ -1,0 +1,8 @@
+onlyBuiltDependencies:
+  - esbuild
+ignoredOptionalDependencies:
+  - "@discordjs/opus"
+confirmModulesPurge: false
+allowBuilds:
+  '@discordjs/opus': false
+  esbuild: true

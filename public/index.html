@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aurora Music Bot</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="topbar">
+        <div>
+          <h1>Aurora</h1>
+          <p id="connectionState">Offline</p>
+        </div>
+        <div class="tokenBox">
+          <input id="tokenInput" type="password" autocomplete="off" placeholder="Panel token" />
+          <button id="saveToken">Save</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="sidebar">
+          <label>
+            Serwer
+            <select id="guildSelect"></select>
+          </label>
+          <label>
+            Guild ID
+            <input id="guildInput" placeholder="ID serwera" />
+          </label>
+          <button id="useGuild" type="button">Wybierz serwer</button>
+          <label>
+            Kanal glosowy
+            <select id="voiceChannelSelect">
+              <option value="">Wybierz kanal</option>
+            </select>
+          </label>
+          <button id="connectVoice" type="button">Polacz z kanalem</button>
+          <div class="stats">
+            <span id="voiceState">Bez polaczenia</span>
+            <span id="modeState">24h wylaczone</span>
+          </div>
+        </aside>
+
+        <section class="player">
+          <div class="now">
+            <img id="cover" alt="" />
+            <div>
+              <span class="eyebrow">Teraz gra</span>
+              <h2 id="nowTitle">Nic nie gra</h2>
+              <p id="nowArtist"></p>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button id="pause" type="button">Pauza</button>
+            <button id="resume" type="button">Wznow</button>
+            <button id="skip" type="button">Pomin</button>
+            <button id="shuffle" type="button">Losuj kolejke</button>
+            <button id="stop" type="button">Stop</button>
+            <button id="clear" type="button">Wyczysc</button>
+          </div>
+
+          <form id="playForm" class="inlineForm">
+            <input id="queryInput" placeholder="YouTube, Spotify albo nazwa utworu" />
+            <button>Dodaj</button>
+          </form>
+
+          <form id="radioForm" class="inlineForm">
+            <input id="radioUrl" placeholder="Adres radia lub live (Premium)" />
+            <input id="radioName" placeholder="Nazwa" />
+            <button>Ustaw radio</button>
+          </form>
+
+          <div class="settings">
+            <label>
+              Glosnosc
+              <input id="volume" type="range" min="1" max="100" value="75" />
+            </label>
+            <label>
+              Efekt
+              <select id="filter">
+                <option value="off">Wylaczony</option>
+                <option value="bassboost">Bass boost</option>
+                <option value="nightcore">Nightcore</option>
+                <option value="8d">8D</option>
+              </select>
+            </label>
+            <label class="switch">
+              24h
+              <input id="stay" type="checkbox" />
+            </label>
+          </div>
+        </section>
+
+        <section class="queue">
+          <div class="queueHeader">
+            <h2>Kolejka</h2>
+            <span id="nextTrack">Nastepny: brak</span>
+          </div>
+          <ol id="queueList"></ol>
+        </section>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "name": "aurora-music-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Discord music bot using Lavalink v4, Kazagumo, Spotify metadata, YouTube, radio and a web panel.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "lavalink:up": "docker compose up -d lavalink",
+    "lavalink:logs": "docker compose logs -f lavalink",
+    "lavalink:down": "docker compose stop lavalink"
+  },
+  "dependencies": {
+    "discord.js": "14.26.4",
+    "dotenv": "17.4.2",
+    "express": "5.2.1",
+    "kazagumo": "3.4.2",
+    "shoukaku": "4.3.0",
+    "socket.io": "4.8.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "26.1.2",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@11.24.0"
+}

@@ -1,0 +1,272 @@
+:root {
+  color-scheme: dark;
+  --bg: #101315;
+  --panel: #191f22;
+  --panel-2: #20272b;
+  --line: #334047;
+  --text: #eef5f3;
+  --muted: #9cafad;
+  --teal: #23a6a6;
+  --coral: #ff8a4c;
+  --violet: #8d7dff;
+  --danger: #ff5d68;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--teal);
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f1416;
+  color: var(--text);
+  padding: 0 12px;
+}
+
+.app {
+  width: min(1280px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 0 22px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 46px);
+  letter-spacing: 0;
+}
+
+.topbar p {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.tokenBox {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) 74px;
+  gap: 8px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 240px minmax(360px, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.sidebar,
+.player,
+.queue {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.sidebar {
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.stats {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.stats span {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--muted);
+}
+
+.now {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.now img {
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: linear-gradient(135deg, var(--teal), var(--coral));
+}
+
+.eyebrow {
+  color: var(--teal);
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.now h2 {
+  margin: 4px 0;
+  font-size: 24px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.now p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 12px;
+}
+
+.inlineForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#radioForm {
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) 88px;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.switch {
+  align-content: end;
+}
+
+.switch input {
+  width: 22px;
+  min-height: 22px;
+}
+
+.queueHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.queueHeader h2 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+.queueHeader span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+#queueList {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 16px 0 0;
+  list-style: none;
+}
+
+#queueList li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-2);
+  min-height: 52px;
+}
+
+#queueList strong,
+#queueList span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+#queueList span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 980px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .app {
+    width: min(100vw - 20px, 1280px);
+    padding-top: 12px;
+  }
+
+  .topbar,
+  .now,
+  .controls,
+  .inlineForm,
+  #radioForm,
+  .settings,
+  .tokenBox {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    display: grid;
+  }
+}
