@@ -242,10 +242,12 @@ export class GuildAudioSession extends EventEmitter {
   async seek(seconds: number) {
     const player = this.requirePlayer();
     const current = player.queue.current;
-    if (!current || current.isStream) throw new Error("Tego strumienia nie można przewijać.");
-    const target = Math.max(0, Math.min(seconds, Math.floor((current.length ?? 0) / 1000)));
-    await player.seek(target);
-    return target;
+    if (!current) throw new Error("Nic teraz nie gra.");
+    if (current.isStream || !current.isSeekable) throw new Error("Tego utworu nie można przewijać.");
+    // Kazagumo/Lavalink oczekują pozycji w milisekundach.
+    const targetMs = Math.max(0, Math.min(seconds * 1000, current.length ?? 0));
+    await player.seek(targetMs);
+    return Math.floor(targetMs / 1000);
   }
 
   async setFilter(mode: "off" | "bassboost" | "nightcore" | "8d") {

@@ -6,7 +6,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 ## Kolejność realizacji
 
 1. ~~Kontrola dostępu do sterowania botem (kanał głosowy)~~ – zrobione
-2. Naprawa `/seek` (milisekundy zamiast sekund)
+2. ~~Naprawa `/seek` (milisekundy zamiast sekund)~~ – zrobione
 3. Usunięcie `.pnpm-store/` z repo
 4. Wymagany token panelu + zawężenie CORS
 5. `compose.yaml`: Lavalink bez całego `.env`
@@ -16,7 +16,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 
 ## Stabilność
 
-- [ ] Naprawić `/seek` (milisekundy zamiast sekund)
+- [x] Naprawić `/seek` (milisekundy zamiast sekund)
 - [ ] Włączyć `resume`, `resumeTimeout`, `resumeByLibrary` w Shoukaku
 - [ ] Zmniejszyć `restTimeout` do ok. 15 s i dodać timeout wyszukiwania
 - [ ] Obsłużyć przeniesienie i wyrzucenie bota z kanału (`playerMoved`, `playerDestroy`, `VoiceStateUpdate` dla bota) i aktualizować `voiceChannel`
