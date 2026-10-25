@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
@@ -12,15 +13,8 @@ import { logger } from "../logger.js";
 export function startWebServer(config: AppConfig, players: PlayerManager, sources: SourceRegistry, client: Client) {
   const app = express();
   const server = http.createServer(app);
-  const io = new Server(server, {
-    cors: {
-      origin: true
-    }
-  });
 
-  app.use(express.json({ limit: "1mb" }));
-  app.use(express.static(path.join(config.rootDir, "public")));
-
+  // Callback OAuth Spotify działa zawsze (chroni go jednorazowy `state`).
   app.get("/auth/spotify/callback", async (req, res, next) => {
     try {
       const code = String(req.query.code ?? "");
@@ -32,6 +26,42 @@ export function startWebServer(config: AppConfig, players: PlayerManager, source
       next(error);
     }
   });
+
+  // Panel (pliki statyczne, API i Socket.IO) wstaje tylko z ustawionym tokenem – bez niego nic z panelu nie jest wystawione.
+  if (config.web.panelToken) {
+    mountPanel(app, server, config, players, client);
+  } else {
+    logger.warn("WEB_PANEL_TOKEN nie jest ustawiony (lub ma wartość z .env.example) – panel webowy wyłączony, działa tylko callback Spotify");
+  }
+
+  app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
+    res.status(400).json({ error: error.message });
+  });
+
+  server.listen(config.web.port, config.web.host, () => {
+    logger.info("web panel ready", { url: `http://${config.web.host}:${config.web.port}`, panelEnabled: Boolean(config.web.panelToken) });
+  });
+
+  return server;
+}
+
+function mountPanel(app: express.Express, server: http.Server, config: AppConfig, players: PlayerManager, client: Client) {
+  // Panel jest serwowany z tego samego origin, więc CORS nie jest potrzebny. WebSocket nie podlega CORS,
+  // dlatego dodatkowo odrzucamy połączenia z przeglądarki, których Origin różni się od hosta panelu.
+  const io = new Server(server, {
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      if (!origin) return callback(null, true);
+      try {
+        callback(null, new URL(origin).host === req.headers.host);
+      } catch {
+        callback(null, false);
+      }
+    }
+  });
+
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.static(path.join(config.rootDir, "public")));
 
   app.get("/api/guilds", requirePanelToken(config), (_req, res) => {
     res.json(guildSnapshots(client, players));
@@ -175,9 +205,7 @@ export function startWebServer(config: AppConfig, players: PlayerManager, source
   });
 
   io.use((socket, next) => {
-    if (!config.web.panelToken) return next();
-    const token = socket.handshake.auth.token || socket.handshake.query.token;
-    if (token === config.web.panelToken) return next();
+    if (tokensMatch(socket.handshake.auth?.token, config.web.panelToken)) return next();
     next(new Error("Unauthorized"));
   });
 
@@ -189,15 +217,6 @@ export function startWebServer(config: AppConfig, players: PlayerManager, source
     io.emit("playback", event);
   });
 
-  app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
-    res.status(400).json({ error: error.message });
-  });
-
-  server.listen(config.web.port, config.web.host, () => {
-    logger.info("web panel ready", { url: `http://${config.web.host}:${config.web.port}` });
-  });
-
-  return server;
 }
 
 function guildSnapshots(client: Client, players: PlayerManager) {
@@ -210,11 +229,17 @@ async function getGuild(client: Client, guildId: string) {
 
 function requirePanelToken(config: AppConfig) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!config.web.panelToken) return next();
-    const token = req.header("x-panel-token") ?? req.query.token;
-    if (token === config.web.panelToken) return next();
+    if (tokensMatch(req.header("x-panel-token"), config.web.panelToken)) return next();
     res.status(401).json({ error: "Unauthorized" });
   };
+}
+
+// Porównanie w stałym czasie (hash wyrównuje długości). Brak tokenu po stronie serwera = zawsze odmowa.
+function tokensMatch(provided: unknown, expected: string | undefined) {
+  if (typeof provided !== "string" || !expected) return false;
+  const a = crypto.createHash("sha256").update(provided).digest();
+  const b = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
 }
 
 function param(req: Request, name: string) {
