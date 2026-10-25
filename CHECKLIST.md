@@ -7,7 +7,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 
 1. ~~Kontrola dostępu do sterowania botem (kanał głosowy)~~ – zrobione
 2. ~~Naprawa `/seek` (milisekundy zamiast sekund)~~ – zrobione
-3. Usunięcie `.pnpm-store/` z repo
+3. ~~Usunięcie `.pnpm-store/` z repo~~ – zrobione
 4. Wymagany token panelu + zawężenie CORS
 5. `compose.yaml`: Lavalink bez całego `.env`
 6. Wycieki pamięci (sesje, `oauthStates`)
@@ -65,7 +65,8 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 
 ## Kod i architektura
 
-- [ ] Usunąć `.pnpm-store/` z repo, dopisać do `.gitignore`, rozważyć przepisanie historii
+- [x] Usunąć `.pnpm-store/` z repo i dopisać do `.gitignore`
+- [ ] (opcjonalnie) Przepisać historię git, żeby pozbyć się `.pnpm-store/` z pierwszego commita (`git filter-repo`, wymaga force-push)
 - [ ] Usunąć martwy kod (`process.ts`, `SourceRegistry`, nieużywane metody Spotify, `Track.query`, `.pnpmfile.cjs`)
 - [ ] Rozbić `interactionHandler.ts` na moduły komend
 - [ ] Mapować błędy na przyjazne komunikaty, szczegóły tylko do logów (ze stack trace)
