@@ -61,7 +61,7 @@ The Lavalink REST/WebSocket node is private on `127.0.0.1:2333`; the panel defau
 - `PREMIUM_GUILD_IDS` and `PREMIUM_USER_IDS`: comma-separated Discord IDs.
 - `FREE_QUEUE_LIMIT`: queued track limit for free users (default 50).
 - `FREE_COOLDOWN_SECONDS` and `PREMIUM_COOLDOWN_SECONDS`: per-user command cooldowns.
-- `LAVALINK_HOST`, `LAVALINK_PORT`, `LAVALINK_PASSWORD`: bot-to-node connection. The Docker service reads the same password from `.env`.
+- `LAVALINK_HOST`, `LAVALINK_PORT`, `LAVALINK_PASSWORD`: bot-to-node connection. The Docker service gets the password (plus `YOUTUBE_REFRESH_TOKEN`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`) from `.env` via `compose.yaml`; it does not receive the rest of `.env`, so `DISCORD_TOKEN` and `WEB_PANEL_TOKEN` never reach the Lavalink container.
 - `SPOTIFY_REDIRECT_URI`: must exactly match the redirect URL registered in Spotify Developer Dashboard.
 - `WEB_PANEL_TOKEN`: enables the web panel. At least 16 characters; if it is empty (or still the placeholder from `.env.example`) the panel, its API and Socket.IO are not started at all, and only the Spotify OAuth callback stays up. The token is sent in the `x-panel-token` header (Socket.IO: `auth.token`), never in the URL. Generate one with `node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`.
 
