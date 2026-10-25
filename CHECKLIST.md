@@ -5,7 +5,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 
 ## Kolejność realizacji
 
-1. Kontrola dostępu do sterowania botem (kanał głosowy)
+1. ~~Kontrola dostępu do sterowania botem (kanał głosowy)~~ – zrobione
 2. Naprawa `/seek` (milisekundy zamiast sekund)
 3. Usunięcie `.pnpm-store/` z repo
 4. Wymagany token panelu + zawężenie CORS
@@ -51,7 +51,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 
 ## Bezpieczeństwo
 
-- [ ] Sprawdzać obecność użytkownika na kanale bota przed `skip/stop/leave/pause/volume/loop/shuffle/seek/filter` i dla przycisków
+- [x] Sprawdzać obecność użytkownika na kanale bota przed `skip/stop/leave/pause/volume/loop/shuffle/seek/filter` i dla przycisków (+ `join/play/playlist/spotify-playlist/radio/mode24h`)
 - [ ] Uczynić `WEB_PANEL_TOKEN` wymaganym (zod) lub nie uruchamiać panelu bez niego
 - [ ] Porównywać token przez `crypto.timingSafeEqual`, zrezygnować z tokenu w query stringu
 - [ ] Ograniczyć CORS w Socket.IO do konkretnego origin

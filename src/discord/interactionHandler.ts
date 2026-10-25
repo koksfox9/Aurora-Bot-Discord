@@ -11,6 +11,7 @@ import type { PlayerManager } from "../player/PlayerManager.js";
 import type { SourceRegistry } from "../sources/SourceRegistry.js";
 import { assertSingleMediaLink } from "../sources/SourceRegistry.js";
 import { CooldownManager } from "./CooldownManager.js";
+import { VOICE_GUARDED_COMMANDS, assertCanControlPlayback } from "./voiceGuard.js";
 
 const commandCooldowns = new CooldownManager();
 const componentCooldowns = new CooldownManager();
@@ -68,6 +69,7 @@ export function installInteractionHandler(client: Client, players: PlayerManager
 async function handleCommand(interaction: ChatInputCommandInteraction, players: PlayerManager, sources: SourceRegistry) {
   if (!interaction.guildId) throw new Error("Ta komenda działa tylko na serwerze.");
   const guildId = interaction.guildId;
+  if (VOICE_GUARDED_COMMANDS.has(interaction.commandName)) assertCanControlPlayback(interaction);
   const session = players.get(guildId);
   const requester = { id: interaction.user.id, username: interaction.user.username };
 
@@ -261,6 +263,7 @@ async function handleCommand(interaction: ChatInputCommandInteraction, players: 
 
 async function handleButton(interaction: ButtonInteraction, players: PlayerManager) {
   if (!interaction.guildId || !interaction.customId.startsWith("music:")) return;
+  assertCanControlPlayback(interaction);
   const retryAt = componentCooldowns.check(interaction.user.id, 3000);
   if (retryAt) {
     await interaction.reply({
