@@ -13,6 +13,7 @@ Aurora is a Discord music bot built with TypeScript, Discord.js, Kazagumo and La
 - Web panel and Discord controls share the same per-server Lavalink queue.
 - Lavalink error, stuck-track and resolution events are logged and announced; failed active tracks are skipped so the queue can continue.
 - Free sessions disconnect after three minutes with an empty voice channel or idle queue.
+- Playback controls (commands and buttons) and moving the bot require being in the bot's voice channel while it has listeners. Members with Manage Server can always control it, and anyone can when the bot's channel has no humans (e.g. 24/7 radio).
 
 Lavalink queue playback provides gapless transitions. This build does not implement crossfade, local audio caching, loudness normalization or voice-speaking ducking; these require additional audio-processing components and are not supplied by Lavalink settings alone.
 Opus encoding quality is set to Lavalink's maximum. The actual voice bitrate is still bounded by Discord's channel/server settings, so the bot cannot promise a fixed 320 kbps.
