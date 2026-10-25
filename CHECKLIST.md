@@ -8,7 +8,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 1. ~~Kontrola dostępu do sterowania botem (kanał głosowy)~~ – zrobione
 2. ~~Naprawa `/seek` (milisekundy zamiast sekund)~~ – zrobione
 3. ~~Usunięcie `.pnpm-store/` z repo~~ – zrobione
-4. Wymagany token panelu + zawężenie CORS
+4. ~~Wymagany token panelu + zawężenie CORS~~ – zrobione
 5. `compose.yaml`: Lavalink bez całego `.env`
 6. Wycieki pamięci (sesje, `oauthStates`)
 7. Obsługa przeniesienia/wyrzucenia bota z kanału + `resume` w Shoukaku
@@ -52,9 +52,9 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 ## Bezpieczeństwo
 
 - [x] Sprawdzać obecność użytkownika na kanale bota przed `skip/stop/leave/pause/volume/loop/shuffle/seek/filter` i dla przycisków (+ `join/play/playlist/spotify-playlist/radio/mode24h`)
-- [ ] Uczynić `WEB_PANEL_TOKEN` wymaganym (zod) lub nie uruchamiać panelu bez niego
-- [ ] Porównywać token przez `crypto.timingSafeEqual`, zrezygnować z tokenu w query stringu
-- [ ] Ograniczyć CORS w Socket.IO do konkretnego origin
+- [x] Uczynić `WEB_PANEL_TOKEN` wymaganym (zod) lub nie uruchamiać panelu bez niego
+- [x] Porównywać token przez `crypto.timingSafeEqual`, zrezygnować z tokenu w query stringu
+- [x] Ograniczyć CORS w Socket.IO do konkretnego origin
 - [ ] Dodać `helmet` i rate limit na panel; ukrywać szczegóły błędów
 - [ ] Przekazywać Lavalinkowi w `compose.yaml` tylko potrzebne zmienne zamiast całego `.env`
 - [ ] Filtrować URL-e w `/play` i `/radio` (blokada adresów prywatnych i `localhost`, whitelist domen)

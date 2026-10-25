@@ -6,6 +6,10 @@ dotenv.config();
 
 const rootDir = process.cwd();
 
+// Wartość z .env.example – publicznie znana, więc nigdy nie może działać jako token.
+const PANEL_TOKEN_PLACEHOLDER = "replace-with-a-random-panel-token";
+const PANEL_TOKEN_MIN_LENGTH = 16;
+
 const boolFromEnv = z
   .string()
   .optional()
@@ -32,7 +36,12 @@ const envSchema = z.object({
   PREMIUM_COOLDOWN_SECONDS: z.coerce.number().min(2).max(3).default(2),
   WEB_HOST: z.string().default("127.0.0.1"),
   WEB_PORT: z.coerce.number().int().positive().default(3100),
-  WEB_PANEL_TOKEN: z.string().optional(),
+  WEB_PANEL_TOKEN: z
+    .string()
+    .optional()
+    .refine((value) => !value || value === PANEL_TOKEN_PLACEHOLDER || value.length >= PANEL_TOKEN_MIN_LENGTH, {
+      message: `WEB_PANEL_TOKEN musi mieć co najmniej ${PANEL_TOKEN_MIN_LENGTH} znaków (albo zostaw go pustego, żeby wyłączyć panel)`
+    }),
   DATA_DIR: z.string().default("./data"),
   DEFAULT_VOLUME: z.coerce.number().min(1).max(100).default(75)
 });
@@ -75,7 +84,8 @@ export const config = {
   web: {
     host: env.WEB_HOST,
     port: env.WEB_PORT,
-    panelToken: env.WEB_PANEL_TOKEN || undefined
+    // Brak tokenu (lub placeholder z .env.example) = panel webowy wyłączony.
+    panelToken: env.WEB_PANEL_TOKEN && env.WEB_PANEL_TOKEN !== PANEL_TOKEN_PLACEHOLDER ? env.WEB_PANEL_TOKEN : undefined
   },
   data: {
     dir: dataDir,
