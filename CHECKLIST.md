@@ -9,7 +9,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 2. ~~Naprawa `/seek` (milisekundy zamiast sekund)~~ – zrobione
 3. ~~Usunięcie `.pnpm-store/` z repo~~ – zrobione
 4. ~~Wymagany token panelu + zawężenie CORS~~ – zrobione
-5. `compose.yaml`: Lavalink bez całego `.env`
+5. ~~`compose.yaml`: Lavalink bez całego `.env`~~ – zrobione
 6. Wycieki pamięci (sesje, `oauthStates`)
 7. Obsługa przeniesienia/wyrzucenia bota z kanału + `resume` w Shoukaku
 8. Pozostałe punkty poniżej, według uznania
@@ -56,7 +56,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 - [x] Porównywać token przez `crypto.timingSafeEqual`, zrezygnować z tokenu w query stringu
 - [x] Ograniczyć CORS w Socket.IO do konkretnego origin
 - [ ] Dodać `helmet` i rate limit na panel; ukrywać szczegóły błędów
-- [ ] Przekazywać Lavalinkowi w `compose.yaml` tylko potrzebne zmienne zamiast całego `.env`
+- [x] Przekazywać Lavalinkowi w `compose.yaml` tylko potrzebne zmienne zamiast całego `.env`
 - [ ] Filtrować URL-e w `/play` i `/radio` (blokada adresów prywatnych i `localhost`, whitelist domen)
 - [ ] Zapisywać `spotify-tokens.json` atomowo (plik tymczasowy + rename) z `mode 0o600`, najlepiej szyfrowane
 - [ ] Dodać TTL i czyszczenie `oauthStates`

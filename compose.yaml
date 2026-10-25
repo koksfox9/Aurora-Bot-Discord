@@ -5,11 +5,16 @@ services:
     restart: unless-stopped
     depends_on:
       - yt-cipher
-    env_file:
-      - .env
+    # Kontener dostaje tylko te zmienne, które czyta application.yml – nie cały .env.
+    # Działają w nim zewnętrzne pluginy, więc DISCORD_TOKEN, WEB_PANEL_TOKEN itd. nie powinny tam trafiać.
+    # Dodajesz nowe ${VAR} do application.yml? Dopisz je też tutaj.
     environment:
       SERVER_PORT: "2333"
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
+      YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       _JAVA_OPTIONS: -Xms256M -Xmx1G
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
