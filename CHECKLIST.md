@@ -74,8 +74,8 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 ## Kod i architektura
 
 - [x] Usunąć `.pnpm-store/` z repo i dopisać do `.gitignore`
-- [ ] (opcjonalnie) Przepisać historię git, żeby pozbyć się `.pnpm-store/` z pierwszego commita (`git filter-repo`, wymaga force-push)
-- [ ] Usunąć martwy kod — lokalne i serwerowe `src/utils/process.ts` oraz wrapper `SourceRegistry` usunięte; walidatory URL są w `MediaInputGuard.ts`. Audyt potwierdził, że metody Spotify i `Track.query` są używane. Do decyzji pozostaje `.pnpmfile.cjs`: modyfikuje `prism-media`, którego nie ma w manifestach, lockfile ani zainstalowanych pakietach.
+- [x] (opcjonalnie) Przepisać historię Git, usuwając `.pnpm-store/` z całej historii `main` (5 132 pliki, 84,3 MB); wymuszony push wykonano z lease
+- [x] Usunąć martwy kod — lokalne i serwerowe `src/utils/process.ts`, wrapper `SourceRegistry` i nieaktywny `.pnpmfile.cjs` usunięte; aktywne walidatory URL są w `MediaInputGuard.ts`. Metody Spotify i `Track.query` pozostawiono, bo są używane.
 - [x] Rozbić `interactionHandler.ts` na moduły komend; obsługę przycisków i zdarzeń odtwarzacza przenieść do osobnych modułów
 - [x] Mapować błędy na przyjazne komunikaty; błędy i stack trace trafiają do logów
 - [x] Dodać ESLint, Prettier i testy — ESLint, Prettier oraz testy `node:test` dla failure/skip, limitów kolejki i cooldownu
