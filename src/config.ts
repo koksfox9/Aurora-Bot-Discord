@@ -32,8 +32,10 @@ const envSchema = z.object({
   PREMIUM_GUILD_IDS: z.string().optional(),
   PREMIUM_USER_IDS: z.string().optional(),
   FREE_QUEUE_LIMIT: z.coerce.number().int().min(1).default(50),
+  PREMIUM_QUEUE_LIMIT: z.coerce.number().int().min(1).max(10_000).default(500),
   FREE_COOLDOWN_SECONDS: z.coerce.number().min(5).max(10).default(7),
   PREMIUM_COOLDOWN_SECONDS: z.coerce.number().min(2).max(3).default(2),
+  RADIO_ALLOWED_DOMAINS: z.string().optional(),
   WEB_HOST: z.string().default("127.0.0.1"),
   WEB_PORT: z.coerce.number().int().positive().default(3100),
   WEB_PANEL_TOKEN: z
@@ -78,6 +80,7 @@ export const config = {
     guildIds: parseIdSet(env.PREMIUM_GUILD_IDS),
     userIds: parseIdSet(env.PREMIUM_USER_IDS),
     freeQueueLimit: env.FREE_QUEUE_LIMIT,
+    premiumQueueLimit: env.PREMIUM_QUEUE_LIMIT,
     freeCooldownMs: env.FREE_COOLDOWN_SECONDS * 1000,
     premiumCooldownMs: env.PREMIUM_COOLDOWN_SECONDS * 1000
   },
@@ -89,15 +92,34 @@ export const config = {
   },
   data: {
     dir: dataDir,
-    tokenFile: path.join(dataDir, "spotify-tokens.json")
+    tokenFile: path.join(dataDir, "spotify-tokens.json"),
+    playbackStateFile: path.join(dataDir, "playback-state.json"),
+    guildSettingsFile: path.join(dataDir, "guild-settings.json")
   },
   playback: {
     defaultVolume: env.DEFAULT_VOLUME / 100
+  },
+  media: {
+    radioAllowedDomains: parseHostSet(env.RADIO_ALLOWED_DOMAINS)
   }
 } as const;
 
 export type AppConfig = typeof config;
 
 function parseIdSet(value: string | undefined) {
-  return new Set((value ?? "").split(",").map((id) => id.trim()).filter(Boolean));
+  return new Set(
+    (value ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+}
+
+function parseHostSet(value: string | undefined) {
+  return new Set(
+    (value ?? "")
+      .split(",")
+      .map((host) => host.trim().toLowerCase().replace(/\.$/, ""))
+      .filter(Boolean)
+  );
 }

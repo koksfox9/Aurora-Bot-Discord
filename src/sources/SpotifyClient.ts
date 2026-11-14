@@ -1,7 +1,7 @@
 import { URL, URLSearchParams } from "node:url";
 import type { AppConfig } from "../config.js";
 import type { Track } from "../domain/types.js";
-import { readJsonFile, writeJsonFile } from "../utils/fs.js";
+import { readJsonFile, writeJsonFileAtomic } from "../utils/fs.js";
 import { nonce, stableId } from "../utils/id.js";
 
 interface SpotifyToken {
@@ -45,12 +45,20 @@ interface SpotifyPlaylist {
 }
 
 export class SpotifyClient {
+  private static readonly OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+  private static readonly OAUTH_STATE_CLEANUP_INTERVAL_MS = 60 * 1000;
   private appToken?: SpotifyToken;
   private userTokens: SpotifyTokenFile = { users: {} };
   private initialized = false;
-  private readonly oauthStates = new Map<string, { discordUserId: string; createdAt: number }>();
+  private readonly oauthStates = new Map<string, { discordUserId: string; expiresAt: number }>();
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(private readonly config: AppConfig) {
+    const cleanupTimer = setInterval(
+      () => this.removeExpiredOAuthStates(),
+      SpotifyClient.OAUTH_STATE_CLEANUP_INTERVAL_MS
+    );
+    cleanupTimer.unref();
+  }
 
   isConfigured() {
     return Boolean(this.config.spotify.clientId && this.config.spotify.clientSecret && this.config.spotify.redirectUri);
@@ -63,8 +71,9 @@ export class SpotifyClient {
 
   createAuthorizeUrl(discordUserId: string) {
     this.assertConfigured();
+    this.removeExpiredOAuthStates();
     const state = nonce("spotify");
-    this.oauthStates.set(state, { discordUserId, createdAt: Date.now() });
+    this.oauthStates.set(state, { discordUserId, expiresAt: Date.now() + SpotifyClient.OAUTH_STATE_TTL_MS });
 
     const params = new URLSearchParams({
       response_type: "code",
@@ -79,6 +88,7 @@ export class SpotifyClient {
 
   async finishAuthorization(code: string, state: string) {
     this.assertConfigured();
+    this.removeExpiredOAuthStates();
     const savedState = this.oauthStates.get(state);
     if (!savedState) throw new Error("Spotify authorization state is missing or expired");
     this.oauthStates.delete(state);
@@ -133,30 +143,6 @@ export class SpotifyClient {
     }
 
     return tracks;
-  }
-
-  async track(input: string, requestedBy?: string): Promise<Track> {
-    const trackId = this.extractTrackId(input);
-    const token = await this.getAppAccessToken();
-    const track = await this.get<SpotifyApiTrack>(`https://api.spotify.com/v1/tracks/${trackId}`, token);
-    return this.toTrack(track, undefined, requestedBy);
-  }
-
-  isSpotifyUrl(input: string) {
-    try {
-      const url = new URL(input);
-      return url.hostname === "open.spotify.com";
-    } catch {
-      return input.startsWith("spotify:");
-    }
-  }
-
-  isPlaylist(input: string) {
-    return input.includes("/playlist/") || input.startsWith("spotify:playlist:");
-  }
-
-  isTrack(input: string) {
-    return input.includes("/track/") || input.startsWith("spotify:track:");
   }
 
   private toTrack(track: SpotifyApiTrack, playlistId: string | undefined, requestedBy?: string): Track {
@@ -218,7 +204,9 @@ export class SpotifyClient {
     return this.appToken.accessToken;
   }
 
-  private async tokenRequest(body: URLSearchParams): Promise<{ access_token: string; refresh_token?: string; expires_in: number }> {
+  private async tokenRequest(
+    body: URLSearchParams
+  ): Promise<{ access_token: string; refresh_token?: string; expires_in: number }> {
     this.assertConfigured();
     const auth = Buffer.from(`${this.config.spotify.clientId}:${this.config.spotify.clientSecret}`).toString("base64");
     const response = await this.fetchSpotify("https://accounts.spotify.com/api/token", {
@@ -261,19 +249,17 @@ export class SpotifyClient {
     return parts[index + 1];
   }
 
-  private extractTrackId(input: string) {
-    if (/^[A-Za-z0-9]{10,}$/.test(input)) return input;
-    if (input.startsWith("spotify:track:")) return input.split(":")[2];
-    const url = new URL(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    const index = parts.indexOf("track");
-    if (index === -1 || !parts[index + 1]) throw new Error("Spotify track URL is invalid");
-    return parts[index + 1];
-  }
-
   private assertConfigured() {
     if (!this.isConfigured()) {
-      throw new Error("Spotify is not configured. Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET and SPOTIFY_REDIRECT_URI.");
+      throw new Error(
+        "Spotify is not configured. Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET and SPOTIFY_REDIRECT_URI."
+      );
+    }
+  }
+
+  private removeExpiredOAuthStates(now = Date.now()) {
+    for (const [state, entry] of this.oauthStates) {
+      if (entry.expiresAt <= now) this.oauthStates.delete(state);
     }
   }
 
@@ -282,7 +268,7 @@ export class SpotifyClient {
       return await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
     } catch (error) {
       if (error instanceof Error && error.name === "TimeoutError") {
-        throw new Error("Spotify nie odpowiedzial w ciagu 20 sekund. Sprobuj ponownie.");
+        throw new Error("Spotify nie odpowiedział w ciągu 20 sekund. Spróbuj ponownie.", { cause: error });
       }
       throw error;
     }
@@ -293,6 +279,6 @@ export class SpotifyClient {
   }
 
   private async save() {
-    await writeJsonFile(this.config.data.tokenFile, this.userTokens);
+    await writeJsonFileAtomic(this.config.data.tokenFile, this.userTokens);
   }
 }

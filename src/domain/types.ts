@@ -26,6 +26,17 @@ export interface Track {
 export interface PlaybackSettings {
   volume: number;
   stayInChannel: boolean;
+  autoplay: boolean;
+}
+
+export interface PersistedGuildPlaybackState {
+  voiceChannelId: string;
+  textChannelId?: string;
+  current?: Track;
+  queue: Track[];
+  loop: "none" | "queue" | "track";
+  settings: PlaybackSettings;
+  radio?: Track;
 }
 
 export interface QueueSnapshot {
@@ -39,6 +50,7 @@ export interface QueueSnapshot {
   current?: Track;
   next?: Track;
   queue: Track[];
+  queueTotal: number;
   history: Track[];
   settings: PlaybackSettings;
   radio?: Track;

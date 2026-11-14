@@ -19,6 +19,7 @@ const nowArtist = $("nowArtist");
 const cover = $("cover");
 const nextTrack = $("nextTrack");
 const queueList = $("queueList");
+const queueCount = $("queueCount");
 const volume = $("volume");
 const filter = $("filter");
 const stay = $("stay");
@@ -45,12 +46,6 @@ socket.on("connect_error", (error) => {
   connectionState.textContent = error.message === "Unauthorized" ? "Wpisz token panelu" : "Nie mozna polaczyc";
 });
 
-socket.on("snapshots", (snapshots) => {
-  state.snapshots = snapshots;
-  render();
-  void loadVoiceChannels();
-});
-
 socket.on("playback", (event) => {
   const index = state.snapshots.findIndex((snapshot) => snapshot.guildId === event.guildId);
   if (index >= 0) state.snapshots[index] = event.snapshot;
@@ -68,6 +63,7 @@ $("useGuild").addEventListener("click", () => {
   state.guildId = guildInput.value.trim();
   localStorage.setItem("auroraGuild", state.guildId);
   render();
+  void refresh();
   void loadVoiceChannels();
 });
 
@@ -75,6 +71,7 @@ guildSelect.addEventListener("change", () => {
   state.guildId = guildSelect.value;
   guildInput.value = state.guildId;
   localStorage.setItem("auroraGuild", state.guildId);
+  subscribeToSelectedGuild();
   render();
   void loadVoiceChannels();
 });
@@ -129,6 +126,7 @@ async function refresh() {
   if (response.ok) {
     state.snapshots = await response.json();
     render();
+    subscribeToSelectedGuild();
     await loadVoiceChannels();
   } else if (response.status === 401) {
     connectionState.textContent = "Wpisz token panelu";
@@ -181,6 +179,13 @@ function headers() {
   return state.token ? { "x-panel-token": state.token } : {};
 }
 
+function subscribeToSelectedGuild() {
+  if (!socket.connected) return;
+  const guildId = state.guildId.trim();
+  if (guildId) socket.emit("guild:subscribe", guildId);
+  else socket.emit("guild:unsubscribe");
+}
+
 function currentGuildId() {
   if (!state.guildId) throw new Error("Guild ID is missing");
   return state.guildId;
@@ -225,6 +230,7 @@ function render() {
     nowArtist.textContent = "";
     cover.removeAttribute("src");
     nextTrack.textContent = "Nastepny: brak";
+    queueCount.textContent = "";
     queueList.innerHTML = "";
     return;
   }
@@ -240,6 +246,10 @@ function render() {
   volume.value = Math.round(snapshot.settings.volume * 100);
   stay.checked = snapshot.settings.stayInChannel;
 
+  queueCount.textContent =
+    snapshot.queueTotal > snapshot.queue.length
+      ? `(${snapshot.queue.length} z ${snapshot.queueTotal})`
+      : `(${snapshot.queueTotal})`;
   queueList.innerHTML = "";
   for (const track of snapshot.queue) {
     const item = document.createElement("li");

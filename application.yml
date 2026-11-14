@@ -61,13 +61,7 @@ plugins:
       refreshToken: "${YOUTUBE_REFRESH_TOKEN:}"
     clients:
       - MUSIC
-      - ANDROID_MUSIC
       - IOS
-      - MWEB
-      - TV
-      - ANDROID_VR
-      - WEB
-      - WEBEMBEDDED
     remoteCipher:
       url: "http://yt-cipher:8001/"
       userAgent: "aurora-music-discord-bot"

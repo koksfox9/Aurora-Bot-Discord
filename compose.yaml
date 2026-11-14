@@ -3,6 +3,8 @@ services:
     image: ghcr.io/lavalink-devs/lavalink:4.2.2
     container_name: aurora-lavalink
     restart: unless-stopped
+    env_file:
+      - .env.youtube
     depends_on:
       - yt-cipher
     # Kontener dostaje tylko te zmienne, które czyta application.yml – nie cały .env.
@@ -12,7 +14,6 @@ services:
       SERVER_PORT: "2333"
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
       LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
-      YOUTUBE_REFRESH_TOKEN: ${YOUTUBE_REFRESH_TOKEN:-}
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       _JAVA_OPTIONS: -Xms256M -Xmx1G

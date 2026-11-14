@@ -2,6 +2,7 @@ node_modules/
 dist/
 data/
 .env
+.env.youtube
 *.log
 *.tmp
 .DS_Store

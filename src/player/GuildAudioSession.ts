@@ -1,12 +1,23 @@
 import { EventEmitter } from "node:events";
 import { PermissionFlagsBits, type VoiceBasedChannel } from "discord.js";
-import { PlayerState, type Kazagumo, type KazagumoPlayer, type KazagumoTrack } from "kazagumo";
+import { PlayerState, type Kazagumo, type KazagumoPlayer, type KazagumoTrack, type PlayerMovedState } from "kazagumo";
 import type { FilterOptions } from "shoukaku";
 import type { AppConfig } from "../config.js";
-import type { PlaybackEvent, PlaybackSettings, QueueSnapshot, Track } from "../domain/types.js";
+import type {
+  PersistedGuildPlaybackState,
+  PlaybackEvent,
+  PlaybackSettings,
+  QueueSnapshot,
+  Track
+} from "../domain/types.js";
 import { logger } from "../logger.js";
+import { assertSafePlaybackInput, assertSafeRadioUrl } from "../sources/MediaInputGuard.js";
+import { availableQueueCapacity } from "./queueCapacity.js";
+import { SkipVoteTracker } from "./SkipVoteTracker.js";
+import { isDuplicateFailureSkip, shouldSkipActiveTrack } from "./failureSkip.js";
 
 type Requester = { id: string; username: string };
+const SEARCH_TIMEOUT_MS = 12_000;
 
 export class GuildAudioSession extends EventEmitter {
   private player?: KazagumoPlayer;
@@ -17,6 +28,10 @@ export class GuildAudioSession extends EventEmitter {
   private readonly history: Track[] = [];
   private readonly recoveredTrackIds = new Map<string, number>();
   private lastFailureSkip?: { trackId: string; at: number };
+  private autoplayGeneration = 0;
+  private autoplayTask?: Promise<void>;
+  private autoplayTrackIdentifier?: string;
+  private readonly skipVotes = new SkipVoteTracker();
   private readonly settings: PlaybackSettings;
   private idleTimer?: NodeJS.Timeout;
   private connectTask?: Promise<void>;
@@ -25,12 +40,14 @@ export class GuildAudioSession extends EventEmitter {
     readonly guildId: string,
     private readonly botUserId: string | undefined,
     private readonly config: AppConfig,
-    private readonly kazagumo: Kazagumo
+    private readonly kazagumo: Kazagumo,
+    defaultVolume = config.playback.defaultVolume
   ) {
     super();
     this.settings = {
-      volume: config.playback.defaultVolume,
-      stayInChannel: false
+      volume: defaultVolume,
+      stayInChannel: false,
+      autoplay: false
     };
   }
 
@@ -43,6 +60,26 @@ export class GuildAudioSession extends EventEmitter {
     const permissions = channel.permissionsFor(botMember ?? this.botUserId ?? "");
     if (!permissions?.has(PermissionFlagsBits.Connect) || !permissions.has(PermissionFlagsBits.Speak)) {
       throw new Error("Bot potrzebuje uprawnień Połącz i Mów na tym kanale głosowym.");
+    }
+
+    if (this.textChannelId) {
+      const textChannel =
+        channel.guild.channels.cache.get(this.textChannelId) ??
+        (await channel.guild.channels.fetch(this.textChannelId).catch(() => null));
+      const botId = botMember?.id ?? this.botUserId;
+      const textPermissions = textChannel?.isTextBased() && botId ? textChannel.permissionsFor(botId) : null;
+      if (
+        !textChannel?.isTextBased() ||
+        !textPermissions?.has([
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.EmbedLinks
+        ])
+      ) {
+        throw new Error(
+          "Bot potrzebuje uprawnień Wyświetlanie kanału, Wysyłanie wiadomości i Osadzanie linków na kanale ogłoszeń."
+        );
+      }
     }
 
     const task = (async () => {
@@ -75,21 +112,33 @@ export class GuildAudioSession extends EventEmitter {
     }
   }
 
-  async enqueueQuery(query: string, requester: Requester, maxQueue: number) {
+  setAnnouncementChannel(channelId?: string) {
+    this.textChannelId = channelId;
+    if (channelId) this.player?.setTextChannel(channelId);
+    this.emitPlayback("settingsChanged");
+  }
+
+  async enqueueQuery(query: string, requester: Requester, maxQueue: number, maxTracksToAdd = maxQueue) {
     const player = this.requirePlayer();
-    const available = Math.max(0, maxQueue - player.queue.size);
+    assertSafePlaybackInput(query);
+    const available = availableQueueCapacity(maxQueue, player.queue.size, maxTracksToAdd);
     if (available === 0) throw new Error(`Kolejka osiągnęła limit ${maxQueue} utworów.`);
 
     const startedAt = Date.now();
     const searchQuery = classifySearchInput(query) === "text-search" ? `ytmsearch:${query}` : query;
-    const result = await this.kazagumo.search(searchQuery, { requester }).catch((error: unknown) => {
+    const result = await searchWithTimeout(this.kazagumo.search(searchQuery, { requester })).catch((error: unknown) => {
+      const timedOut = error instanceof SearchTimeoutError;
       logger.warn("Lavalink search request failed", {
         guildId: this.guildId,
         inputType: classifySearchInput(query),
         durationMs: Date.now() - startedAt,
-        errorType: error instanceof Error ? error.name : typeof error
+        errorType: timedOut ? "SearchTimeout" : error instanceof Error ? error.name : typeof error
       });
-      throw new Error("Lavalink nie odpowiedział na wyszukiwanie. Spróbuj ponownie za chwilę.");
+      throw new Error(
+        timedOut
+          ? "Wyszukiwanie trwało zbyt długo. Spróbuj ponownie za chwilę."
+          : "Lavalink nie odpowiedział na wyszukiwanie. Spróbuj ponownie za chwilę."
+      );
     });
     const tracks = result.tracks.slice(0, available);
     logger.info("Lavalink search completed", {
@@ -120,9 +169,70 @@ export class GuildAudioSession extends EventEmitter {
     return { tracks: added, truncated: result.tracks.length > tracks.length };
   }
 
+  async restore(state: PersistedGuildPlaybackState, channel: VoiceBasedChannel) {
+    const volume = Number.isFinite(state.settings.volume)
+      ? Math.max(0, Math.min(1, state.settings.volume))
+      : this.config.playback.defaultVolume;
+    this.textChannelId = state.textChannelId;
+    this.setSettings({
+      volume,
+      stayInChannel: Boolean(state.settings.stayInChannel || state.radio),
+      autoplay: Boolean(state.settings.autoplay)
+    });
+    await this.connect(channel, state.textChannelId);
+
+    if (state.radio) {
+      const radioQuery = trackLookup(state.radio);
+      if (radioQuery) {
+        await this.setRadio(radioQuery, state.radio.title, {
+          id: "restored",
+          username: state.radio.requestedBy ?? "Aurora Music"
+        });
+      } else {
+        logger.warn("Saved radio has no reusable source URL", { guildId: this.guildId, title: state.radio.title });
+      }
+    }
+
+    const savedTracks = state.radio ? state.queue : [...(state.current ? [state.current] : []), ...state.queue];
+    const resolved: Array<KazagumoTrack | undefined> = new Array(savedTracks.length);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(3, savedTracks.length) }, async () => {
+      while (nextIndex < savedTracks.length) {
+        const index = nextIndex++;
+        const savedTrack = savedTracks[index];
+        const query = trackLookup(savedTrack);
+        if (!query) continue;
+        try {
+          const result = await searchWithTimeout(
+            this.kazagumo.search(query, {
+              requester: { id: "restored", username: savedTrack.requestedBy ?? "Aurora Music" }
+            })
+          );
+          resolved[index] = result.tracks[0];
+        } catch (error) {
+          logger.warn("Could not restore saved track", {
+            guildId: this.guildId,
+            title: savedTrack.title,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+    });
+    await Promise.all(workers);
+
+    const player = this.requirePlayer();
+    const tracks = resolved.filter((track): track is KazagumoTrack => Boolean(track));
+    if (tracks.length > 0) player.queue.add(tracks);
+    if (!state.radio && ["none", "queue", "track"].includes(state.loop)) {
+      player.setLoop(state.loop);
+    }
+    if (!player.playing && !player.paused && player.queue.size > 0) await player.play();
+    this.emitPlayback("queueChanged");
+  }
+
   async enqueueSpotifyTracks(tracks: Track[], requester: Requester, maxQueue: number) {
     const player = this.requirePlayer();
-    const available = Math.max(0, maxQueue - player.queue.size);
+    const available = availableQueueCapacity(maxQueue, player.queue.size);
     if (available === 0) throw new Error(`Kolejka osiągnęła limit ${maxQueue} utworów.`);
     const candidates = tracks.slice(0, available);
     const resolved: KazagumoTrack[] = new Array(candidates.length);
@@ -135,7 +245,7 @@ export class GuildAudioSession extends EventEmitter {
         const uri = item.spotify?.externalUrl ?? item.webpageUrl;
         if (!uri) continue;
         try {
-          const result = await this.kazagumo.search(uri, { requester });
+          const result = await searchWithTimeout(this.kazagumo.search(uri, { requester }));
           if (result.tracks[0]) resolved[index] = result.tracks[0];
         } catch (error) {
           logger.warn("Spotify playlist item could not be resolved by Lavalink", {
@@ -159,7 +269,8 @@ export class GuildAudioSession extends EventEmitter {
 
   async setRadio(url: string, name: string | undefined, requester: Requester) {
     const player = this.requirePlayer();
-    const result = await this.kazagumo.search(url, { requester });
+    await assertSafeRadioUrl(url, this.config.media.radioAllowedDomains);
+    const result = await searchWithTimeout(this.kazagumo.search(url, { requester }));
     const track = result.tracks[0];
     if (!track) throw new Error("Lavalink nie rozpoznał adresu radia. Użyj bezpośredniego URL do strumienia audio.");
 
@@ -183,16 +294,99 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   clearQueue() {
+    this.clearSkipVotes();
     this.player?.queue.clear();
     this.radio = undefined;
     this.player?.setLoop("none");
+    this.disableAutoplay();
     this.emitPlayback("queueChanged");
+  }
+
+  clearUpcomingQueue() {
+    const player = this.player;
+    const removed = player?.queue.size ?? 0;
+    player?.queue.clear();
+    if (player?.loop === "queue") player.setLoop("none");
+    this.emitPlayback("queueChanged");
+    return removed;
+  }
+
+  removeQueued(position: number) {
+    const queue = this.player?.queue;
+    if (!queue?.size) throw new Error("Kolejka jest pusta.");
+    if (!Number.isInteger(position) || position < 1 || position > queue.size) {
+      throw new Error(`Podaj numer utworu od 1 do ${queue.size}.`);
+    }
+    const removed = queue[position - 1];
+    queue.remove(position - 1);
+    return this.toTrack(removed);
+  }
+
+  moveQueued(from: number, to: number) {
+    const queue = this.player?.queue;
+    if (!queue?.size) throw new Error("Kolejka jest pusta.");
+    if (
+      !Number.isInteger(from) ||
+      from < 1 ||
+      from > queue.size ||
+      !Number.isInteger(to) ||
+      to < 1 ||
+      to > queue.size
+    ) {
+      throw new Error(`Podaj pozycje od 1 do ${queue.size}.`);
+    }
+    if (from === to) return undefined;
+    const [moved] = queue.splice(from - 1, 1);
+    queue.splice(to - 1, 0, moved);
+    this.emitPlayback("queueChanged");
+    return this.toTrack(moved);
+  }
+
+  async skipTo(position: number) {
+    const player = this.player;
+    const queue = player?.queue;
+    if (!player || !queue?.size) throw new Error("Kolejka jest pusta.");
+    if (!Number.isInteger(position) || position < 1 || position > queue.size) {
+      throw new Error(`Podaj pozycje od 1 do ${queue.size}.`);
+    }
+
+    const target = queue[position - 1];
+    queue.splice(0, position - 1);
+    if (player.loop === "track") player.setLoop("none");
+    this.radio = undefined;
+    if (queue.current) player.skip();
+    else await player.play();
+    this.emitPlayback("queueChanged");
+    return this.toTrack(target);
+  }
+
+  async playPrevious() {
+    const player = this.player;
+    if (!player) throw new Error("Nie ma aktywnego odtwarzacza.");
+    const previous = player.getPrevious(true);
+    if (!previous) throw new Error("Nie ma poprzedniego utworu w historii.");
+    this.radio = undefined;
+    await player.play(previous);
+    this.emitPlayback("queueChanged");
+    return this.toTrack(previous);
   }
 
   skip() {
     if (!this.player?.queue.current) return false;
+    this.clearSkipVotes();
     this.player.skip();
     return true;
+  }
+
+  castSkipVote(userId: string, requiredVotes: number) {
+    const current = this.player?.queue.current;
+    if (!current) return { status: "empty" as const, votes: 0, required: requiredVotes };
+    const trackId = `${current.identifier}:${current.length}:${current.title}`;
+    const result = this.skipVotes.cast(trackId, userId, requiredVotes);
+    if (result.status === "skipped") {
+      this.skip();
+    }
+    return result;
   }
 
   pause() {
@@ -209,16 +403,20 @@ export class GuildAudioSession extends EventEmitter {
     return true;
   }
 
-  disconnect() {
+  async disconnect() {
     this.clearIdleTimer();
+    this.disableAutoplay();
     const player = this.player ?? this.kazagumo.getPlayer(this.guildId);
     this.player = undefined;
     this.current = undefined;
     this.radio = undefined;
     this.voiceChannel = undefined;
     this.settings.stayInChannel = false;
-    if (player) void player.destroy();
-    this.emitPlayback("idle");
+    try {
+      if (player) await player.destroy();
+    } finally {
+      this.emitPlayback("idle");
+    }
   }
 
   setSettings(settings: Partial<PlaybackSettings>) {
@@ -230,6 +428,18 @@ export class GuildAudioSession extends EventEmitter {
       this.settings.stayInChannel = settings.stayInChannel;
       if (settings.stayInChannel) this.clearIdleTimer();
       else this.onVoiceStateChanged();
+    }
+    if (settings.autoplay !== undefined && settings.autoplay !== this.settings.autoplay) {
+      this.settings.autoplay = settings.autoplay;
+      this.autoplayGeneration += 1;
+      if (!settings.autoplay) {
+        this.autoplayTrackIdentifier = undefined;
+        const player = this.player;
+        if (player && !player.queue.current && !player.queue.size) this.scheduleIdleDisconnect();
+      } else {
+        const player = this.player;
+        if (player && !player.queue.current && !player.queue.size && this.history.length > 0) this.onPlayerEmpty();
+      }
     }
     this.emitPlayback("settingsChanged");
   }
@@ -256,7 +466,12 @@ export class GuildAudioSession extends EventEmitter {
       timescale: null,
       rotation: null,
       ...(mode === "bassboost" && {
-        equalizer: [{ band: 0, gain: 0.18 }, { band: 1, gain: 0.16 }, { band: 2, gain: 0.12 }, { band: 3, gain: 0.08 }]
+        equalizer: [
+          { band: 0, gain: 0.18 },
+          { band: 1, gain: 0.16 },
+          { band: 2, gain: 0.12 },
+          { band: 3, gain: 0.08 }
+        ]
       }),
       ...(mode === "nightcore" && { timescale: { speed: 1.15, pitch: 1.15, rate: 1 } }),
       ...(mode === "8d" && { rotation: { rotationHz: 0.2 } })
@@ -288,6 +503,7 @@ export class GuildAudioSession extends EventEmitter {
       loop: player?.loop ?? "none",
       next: queued[0] ?? (currentTrack?.id !== this.radio?.id ? this.radio : undefined),
       queue: queued,
+      queueTotal: player?.queue.size ?? 0,
       history: this.history.slice(-10).reverse(),
       settings: { ...this.settings },
       radio: this.radio
@@ -295,6 +511,7 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   onTrackStart(track: KazagumoTrack) {
+    this.clearSkipVotes();
     this.clearIdleTimer();
     const mapped = this.toTrack(track);
     this.current = mapped.id === this.radio?.id ? this.radio : mapped;
@@ -302,6 +519,7 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   onTrackEnd() {
+    this.clearSkipVotes();
     if (this.current && this.current.id !== this.radio?.id) {
       this.history.push(this.current);
       if (this.history.length > 50) this.history.shift();
@@ -316,8 +534,75 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   onPlayerEmpty() {
+    if (this.settings.autoplay) {
+      if (!this.autoplayTask) {
+        const task = this.startAutoplay().finally(() => {
+          if (this.autoplayTask === task) this.autoplayTask = undefined;
+          const player = this.player;
+          if (this.settings.autoplay && player && !player.queue.current && !player.queue.size) this.onPlayerEmpty();
+        });
+        this.autoplayTask = task;
+      }
+      return;
+    }
     this.emitPlayback("idle");
     this.scheduleIdleDisconnect();
+  }
+
+  private async startAutoplay() {
+    const generation = this.autoplayGeneration;
+    const player = this.player;
+    const seed = this.history.at(-1);
+    if (!player || playerUnavailable(player) || !seed) {
+      this.finishAutoplay();
+      return;
+    }
+
+    try {
+      const query = seed.artist ? `${seed.artist} songs` : `${seed.title} similar songs`;
+      const result = await searchWithTimeout(
+        this.kazagumo.search(`ytmsearch:${query}`, {
+          requester: { id: "autoplay", username: "Aurora Music" }
+        })
+      );
+      if (generation !== this.autoplayGeneration || !this.settings.autoplay) return;
+      if (playerUnavailable(player) || player.queue.current || player.queue.size) return;
+
+      const recentIds = new Set(this.history.slice(-20).map((track) => track.id));
+      const next = result.tracks.find((track) => !recentIds.has(`${track.identifier}:${track.length}:${track.title}`));
+      if (!next) {
+        this.finishAutoplay();
+        return;
+      }
+
+      player.queue.add(next);
+      this.autoplayTrackIdentifier = next.identifier;
+      await player.play();
+      this.clearIdleTimer();
+      logger.info("Autoplay selected a related track", { guildId: this.guildId, title: next.title });
+      this.emitPlayback("queueChanged");
+    } catch (error) {
+      if (generation !== this.autoplayGeneration || !this.settings.autoplay) return;
+      logger.warn("Autoplay search failed", {
+        guildId: this.guildId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      this.finishAutoplay();
+    }
+  }
+
+  private finishAutoplay() {
+    this.disableAutoplay();
+    this.emitPlayback("idle");
+    this.scheduleIdleDisconnect();
+  }
+
+  private disableAutoplay() {
+    if (!this.settings.autoplay) return;
+    this.settings.autoplay = false;
+    this.autoplayGeneration += 1;
+    this.autoplayTrackIdentifier = undefined;
+    this.emitPlayback("settingsChanged");
   }
 
   onPlayerFailure(message: string, track?: KazagumoTrack, skip = false) {
@@ -331,14 +616,20 @@ export class GuildAudioSession extends EventEmitter {
     const activeId = activeTrack?.identifier;
     const sameFailure = Boolean(reportedId && this.recoveredTrackIds.has(reportedId));
     const delayedDuplicate = Boolean(
-      !reportedId && this.lastFailureSkip && now - this.lastFailureSkip.at < 2500 && activeId !== this.lastFailureSkip.trackId
+      !reportedId &&
+      this.lastFailureSkip &&
+      now - this.lastFailureSkip.at < 2500 &&
+      activeId !== this.lastFailureSkip.trackId
     );
-    if (skip && (sameFailure || delayedDuplicate)) return;
+    if (isDuplicateFailureSkip(skip, sameFailure, delayedDuplicate)) return;
 
     const failed = track ? this.toTrack(track) : this.current;
     logger.warn("Lavalink playback error", { guildId: this.guildId, title: failed?.title, error: message });
+    if (this.settings.autoplay && activeTrack && activeTrack.identifier === this.autoplayTrackIdentifier) {
+      this.disableAutoplay();
+    }
     this.emitPlayback("error", failed, message);
-    if (skip && activeTrack && (!reportedId || reportedId === activeId)) {
+    if (activeTrack && shouldSkipActiveTrack(skip, activeId, reportedId)) {
       this.recoveredTrackIds.set(activeTrack.identifier, now + 30_000);
       this.lastFailureSkip = { trackId: activeTrack.identifier, at: now };
       this.player?.skip();
@@ -352,6 +643,44 @@ export class GuildAudioSession extends EventEmitter {
     else this.clearIdleTimer();
   }
 
+  onBotVoiceChannelChanged(channel: VoiceBasedChannel | undefined) {
+    if (!channel) {
+      if (this.voiceChannel || this.player) {
+        void this.disconnect().catch((error: unknown) => {
+          logger.warn("Could not destroy the player after the bot left voice", {
+            guildId: this.guildId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }
+      return;
+    }
+
+    if (this.voiceChannel?.id === channel.id) return;
+    this.voiceChannel = channel;
+    this.clearIdleTimer();
+    this.emitPlayback("settingsChanged");
+  }
+
+  onPlayerMoved(state: PlayerMovedState, channel: VoiceBasedChannel | undefined) {
+    if (state === "LEFT") {
+      this.onBotVoiceChannelChanged(undefined);
+      return;
+    }
+    if (channel) this.onBotVoiceChannelChanged(channel);
+  }
+
+  onPlayerDestroyed(player: KazagumoPlayer) {
+    if (this.player && this.player !== player) return;
+    if (!this.player && !this.current && !this.radio && !this.voiceChannel) return;
+    this.clearIdleTimer();
+    this.player = undefined;
+    this.current = undefined;
+    this.radio = undefined;
+    this.voiceChannel = undefined;
+    this.emitPlayback("idle");
+  }
+
   private scheduleIdleDisconnect() {
     this.clearIdleTimer();
     if (this.settings.stayInChannel) return;
@@ -359,7 +688,14 @@ export class GuildAudioSession extends EventEmitter {
       if (this.settings.stayInChannel) return;
       const listeners = this.voiceChannel?.members.filter((member) => !member.user.bot).size ?? 0;
       const player = this.player;
-      if (listeners === 0 || (!player?.playing && !player?.queue.size)) this.disconnect();
+      if (listeners === 0 || (!player?.playing && !player?.queue.size)) {
+        void this.disconnect().catch((error: unknown) => {
+          logger.warn("Could not destroy an idle player", {
+            guildId: this.guildId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }
     }, 180_000);
     this.idleTimer.unref();
   }
@@ -367,6 +703,10 @@ export class GuildAudioSession extends EventEmitter {
   private clearIdleTimer() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = undefined;
+  }
+
+  private clearSkipVotes() {
+    this.skipVotes.clear();
   }
 
   private requirePlayer() {
@@ -379,7 +719,8 @@ export class GuildAudioSession extends EventEmitter {
   private toTrack(track: KazagumoTrack): Track {
     const sourceName = String(track.sourceName ?? "youtube").toLowerCase();
     const spotifyUri = `${track.uri ?? ""} ${track.realUri ?? ""}`.includes("spotify.com");
-    const source = sourceName.includes("spotify") || spotifyUri ? "spotify" : sourceName.includes("youtube") ? "youtube" : "direct";
+    const source =
+      sourceName.includes("spotify") || spotifyUri ? "spotify" : sourceName.includes("youtube") ? "youtube" : "direct";
     const uri = track.realUri || track.uri || undefined;
     const requester = track.requester as Partial<Requester> | undefined;
     return {
@@ -414,4 +755,33 @@ function classifySearchInput(query: string) {
   if (/^spotify:/i.test(normalized)) return "spotify-uri";
   if (/^(spsearch|ytsearch|ytmsearch|scsearch):/i.test(normalized)) return "prefixed-search";
   return "text-search";
+}
+
+function trackLookup(track: Track) {
+  return track.spotify?.externalUrl ?? track.webpageUrl ?? track.url ?? track.query;
+}
+
+function playerUnavailable(player: KazagumoPlayer) {
+  return player.state === PlayerState.DESTROYED || player.state === PlayerState.DESTROYING;
+}
+
+class SearchTimeoutError extends Error {
+  constructor() {
+    super("Lavalink search timed out");
+    this.name = "SearchTimeoutError";
+  }
+}
+
+async function searchWithTimeout<T>(search: Promise<T>, timeoutMs = SEARCH_TIMEOUT_MS): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      search,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new SearchTimeoutError()), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
