@@ -276,7 +276,6 @@ export class GuildAudioSession extends EventEmitter {
 
     const current = player.queue.current;
     player.queue.clear();
-    player.setLoop("track");
     this.radio = this.toTrack(track);
     if (name?.trim()) this.radio.title = name.trim();
     this.settings.stayInChannel = true;
@@ -284,10 +283,11 @@ export class GuildAudioSession extends EventEmitter {
       this.radio = this.toTrack(current);
       if (name?.trim()) this.radio.title = name.trim();
     } else {
-      player.queue.add(track);
-      if (current) player.skip();
-      else if (!player.playing && !player.paused) await player.play();
+      await player.play(track, { replaceCurrent: true });
     }
+    // Set the loop only after replacing the current track. Otherwise a skip can
+    // replay the previous song instead of starting the selected radio station.
+    player.setLoop("track");
     this.clearIdleTimer();
     this.emitPlayback("queueChanged");
     return this.radio;

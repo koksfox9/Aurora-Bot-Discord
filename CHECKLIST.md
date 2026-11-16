@@ -12,10 +12,10 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 
 ### Priorytet 1 – zepsute funkcje i luki
 
-- [ ] **P1. `/radio` nie przełącza na radio, gdy coś gra** [odtworzone]
+- [x] **P1. `/radio` nie przełącza na radio, gdy coś gra**
   - `setRadio` ustawia `loop=track` przed `skip()`, więc Kazagumo wraca do starego utworu; dotyczy też zmiany stacji.
-  - Zmiana: `player.play(track, { replaceCurrent: true })`, dopiero potem `setLoop("track")`.
-  - Test: radio przy grającym utworze, radio → radio, radio bez grającego utworu.
+  - Zmiana: `player.play(track, { replaceCurrent: true })`, dopiero potem `setLoop("track")`; nie ma już `skip()` poprzedniego utworu.
+  - Test: radio przy grającym utworze, radio → radio, radio bez grającego utworu (3/3).
 - [ ] **P2. Zależności z podatnościami (22, w tym 1 krytyczna, 9 wysokich)** [odtworzone]
   - Podnieść `express 5.3.0`, `socket.io 4.8.4`, `discord.js 14.28.1`, `zod 4.6.7`, potem `pnpm update --depth Infinity` dla zależności pośrednich.
   - Test: `pnpm audit --prod` bez podatności; `check`, `lint`, `format:check`, `test`, `build` przechodzą.
