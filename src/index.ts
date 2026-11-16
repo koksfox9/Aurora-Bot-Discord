@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { Kazagumo, Plugins } from "kazagumo";
-import { Connectors } from "shoukaku";
+import { Connectors, Constants } from "shoukaku";
 import { config } from "./config.js";
 import { installInteractionHandler } from "./discord/interactionHandler.js";
 import { logger } from "./logger.js";
@@ -88,6 +88,23 @@ async function main() {
     logger.warn("Lavalink node reconnecting", { name, reconnectsLeft, reconnectIntervalSeconds });
   });
 
+  // Shoukaku stops retrying after reconnectTries is exhausted. Keep checking so
+  // a longer Lavalink outage does not leave the bot disconnected indefinitely.
+  const nodeRecoveryInterval = setInterval(() => {
+    for (const node of kazagumo.shoukaku.nodes.values()) {
+      if (node.state !== Constants.State.DISCONNECTED) continue;
+
+      logger.warn("Lavalink node recovery retry", { name: node.name });
+      void node.connect().catch((error: unknown) => {
+        logger.error("Lavalink node recovery failed", {
+          name: node.name,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }
+  }, 30_000);
+  nodeRecoveryInterval.unref();
+
   let players: PlayerManager | undefined;
   let webServer: ReturnType<typeof startWebServer> | undefined;
   let shutdownPromise: Promise<void> | undefined;
@@ -115,6 +132,7 @@ async function main() {
     if (!shutdownPromise) {
       shutdownPromise = (async () => {
         logger.info("shutting down", { signal });
+        clearInterval(nodeRecoveryInterval);
         let failed = false;
         const runStep = async (name: string, action: () => Promise<unknown> | void | undefined) => {
           try {

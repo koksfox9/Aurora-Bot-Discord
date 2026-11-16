@@ -12,12 +12,14 @@ import type {
 } from "../domain/types.js";
 import { logger } from "../logger.js";
 import { assertSafePlaybackInput, assertSafeRadioUrl } from "../sources/MediaInputGuard.js";
+import { getYouTubePlaylistId, loadYouTubePlaylistVideoIds } from "../sources/YouTubePlaylistClient.js";
 import { availableQueueCapacity } from "./queueCapacity.js";
 import { SkipVoteTracker } from "./SkipVoteTracker.js";
 import { isDuplicateFailureSkip, shouldSkipActiveTrack } from "./failureSkip.js";
 
 type Requester = { id: string; username: string };
 const SEARCH_TIMEOUT_MS = 12_000;
+const AUTOPLAY_RETRY_MS = 15_000;
 
 export class GuildAudioSession extends EventEmitter {
   private player?: KazagumoPlayer;
@@ -30,7 +32,7 @@ export class GuildAudioSession extends EventEmitter {
   private lastFailureSkip?: { trackId: string; at: number };
   private autoplayGeneration = 0;
   private autoplayTask?: Promise<void>;
-  private autoplayTrackIdentifier?: string;
+  private autoplayRetryTimer?: NodeJS.Timeout;
   private readonly skipVotes = new SkipVoteTracker();
   private readonly settings: PlaybackSettings;
   private idleTimer?: NodeJS.Timeout;
@@ -167,6 +169,74 @@ export class GuildAudioSession extends EventEmitter {
     this.clearIdleTimer();
     this.emitPlayback("queueChanged");
     return { tracks: added, truncated: result.tracks.length > tracks.length };
+  }
+
+  async enqueueYouTubePlaylist(
+    query: string,
+    requester: Requester,
+    maxQueue: number,
+    maxTracksToAdd = maxQueue
+  ) {
+    const player = this.requirePlayer();
+    assertSafePlaybackInput(query);
+    const playlistId = getYouTubePlaylistId(query);
+    if (!playlistId) throw new Error("Podaj link do playlisty YouTube zawierający parametr list=.");
+
+    const available = availableQueueCapacity(maxQueue, player.queue.size, maxTracksToAdd);
+    if (available === 0) throw new Error(`Kolejka osiągnęła limit ${maxQueue} utworów.`);
+
+    let playlist: Awaited<ReturnType<typeof loadYouTubePlaylistVideoIds>>;
+    try {
+      playlist = await loadYouTubePlaylistVideoIds(playlistId, available);
+    } catch (error) {
+      logger.warn("YouTube playlist could not be read", {
+        guildId: this.guildId,
+        playlistId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw new Error("Nie udało się odczytać playlisty YouTube. Sprawdź, czy jest publiczna lub dostępna przez link.", {
+        cause: error
+      });
+    }
+
+    if (playlist.videoIds.length === 0) throw new Error("Ta playlista YouTube nie zawiera dostępnych utworów.");
+
+    const resolved: Array<KazagumoTrack | undefined> = new Array(playlist.videoIds.length);
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(3, playlist.videoIds.length) }, async () => {
+      while (nextIndex < playlist.videoIds.length) {
+        const index = nextIndex++;
+        const videoId = playlist.videoIds[index];
+        try {
+          const result = await searchWithTimeout(
+            this.kazagumo.search(`https://www.youtube.com/watch?v=${videoId}`, { requester })
+          );
+          if (result.tracks[0]) resolved[index] = result.tracks[0];
+        } catch {
+          // A playlist can contain deleted, private, or region-restricted videos.
+        }
+      }
+    });
+    await Promise.all(workers);
+
+    const playable = resolved.filter((track): track is KazagumoTrack => Boolean(track));
+    const unavailable = playlist.videoIds.length - playable.length;
+    logger.info("YouTube playlist resolved", {
+      guildId: this.guildId,
+      playlistId,
+      requested: playlist.videoIds.length,
+      added: playable.length,
+      unavailable,
+      truncated: playlist.truncated
+    });
+    if (playable.length === 0) throw new Error("Lavalink nie znalazł odtwarzalnych utworów z tej playlisty.");
+
+    player.queue.add(playable);
+    const added = playable.map((track) => this.toTrack(track));
+    if (!player.playing && !player.paused) await player.play();
+    this.clearIdleTimer();
+    this.emitPlayback("queueChanged");
+    return { tracks: added, truncated: playlist.truncated, unavailable };
   }
 
   async restore(state: PersistedGuildPlaybackState, channel: VoiceBasedChannel) {
@@ -433,7 +503,7 @@ export class GuildAudioSession extends EventEmitter {
       this.settings.autoplay = settings.autoplay;
       this.autoplayGeneration += 1;
       if (!settings.autoplay) {
-        this.autoplayTrackIdentifier = undefined;
+        this.clearAutoplayRetry();
         const player = this.player;
         if (player && !player.queue.current && !player.queue.size) this.scheduleIdleDisconnect();
       } else {
@@ -539,7 +609,9 @@ export class GuildAudioSession extends EventEmitter {
         const task = this.startAutoplay().finally(() => {
           if (this.autoplayTask === task) this.autoplayTask = undefined;
           const player = this.player;
-          if (this.settings.autoplay && player && !player.queue.current && !player.queue.size) this.onPlayerEmpty();
+          if (this.settings.autoplay && player && !player.queue.current && !player.queue.size) {
+            this.scheduleAutoplayRetry();
+          }
         });
         this.autoplayTask = task;
       }
@@ -553,30 +625,51 @@ export class GuildAudioSession extends EventEmitter {
     const generation = this.autoplayGeneration;
     const player = this.player;
     const seed = this.history.at(-1);
-    if (!player || playerUnavailable(player) || !seed) {
-      this.finishAutoplay();
+    if (!player || playerUnavailable(player)) return;
+    if (!seed) {
+      this.emitPlayback("idle");
+      this.scheduleIdleDisconnect();
       return;
     }
 
     try {
-      const query = seed.artist ? `${seed.artist} songs` : `${seed.title} similar songs`;
-      const result = await searchWithTimeout(
-        this.kazagumo.search(`ytmsearch:${query}`, {
-          requester: { id: "autoplay", username: "Aurora Music" }
-        })
-      );
-      if (generation !== this.autoplayGeneration || !this.settings.autoplay) return;
-      if (playerUnavailable(player) || player.queue.current || player.queue.size) return;
-
       const recentIds = new Set(this.history.slice(-20).map((track) => track.id));
-      const next = result.tracks.find((track) => !recentIds.has(`${track.identifier}:${track.length}:${track.title}`));
+      const queries = [
+        ...(seed.artist ? [`${seed.artist} songs`, `${seed.artist} similar artists`] : []),
+        `${seed.title} similar songs`
+      ];
+      let next: KazagumoTrack | undefined;
+      let lastSearchError: unknown;
+      for (const query of queries) {
+        let result: Awaited<ReturnType<Kazagumo["search"]>>;
+        try {
+          result = await searchWithTimeout(
+            this.kazagumo.search(`ytmsearch:${query}`, {
+              requester: { id: "autoplay", username: "Aurora Music" }
+            })
+          );
+        } catch (error) {
+          lastSearchError = error;
+          if (generation !== this.autoplayGeneration || !this.settings.autoplay) return;
+          continue;
+        }
+        if (generation !== this.autoplayGeneration || !this.settings.autoplay) return;
+        if (playerUnavailable(player) || player.queue.current || player.queue.size) return;
+        next = result.tracks.find((track) => !recentIds.has(`${track.identifier}:${track.length}:${track.title}`));
+        if (next) break;
+      }
+
       if (!next) {
-        this.finishAutoplay();
+        logger.warn("Autoplay found no new related track; it will retry", {
+          guildId: this.guildId,
+          error: lastSearchError instanceof Error ? lastSearchError.message : undefined
+        });
+        this.emitPlayback("idle");
+        this.scheduleIdleDisconnect();
         return;
       }
 
       player.queue.add(next);
-      this.autoplayTrackIdentifier = next.identifier;
       await player.play();
       this.clearIdleTimer();
       logger.info("Autoplay selected a related track", { guildId: this.guildId, title: next.title });
@@ -587,21 +680,31 @@ export class GuildAudioSession extends EventEmitter {
         guildId: this.guildId,
         error: error instanceof Error ? error.message : String(error)
       });
-      this.finishAutoplay();
+      this.emitPlayback("idle");
+      this.scheduleIdleDisconnect();
     }
   }
 
-  private finishAutoplay() {
-    this.disableAutoplay();
-    this.emitPlayback("idle");
-    this.scheduleIdleDisconnect();
+  private scheduleAutoplayRetry() {
+    if (this.autoplayRetryTimer || !this.settings.autoplay) return;
+    this.autoplayRetryTimer = setTimeout(() => {
+      this.autoplayRetryTimer = undefined;
+      this.onPlayerEmpty();
+    }, AUTOPLAY_RETRY_MS);
+    this.autoplayRetryTimer.unref();
+  }
+
+  private clearAutoplayRetry() {
+    if (!this.autoplayRetryTimer) return;
+    clearTimeout(this.autoplayRetryTimer);
+    this.autoplayRetryTimer = undefined;
   }
 
   private disableAutoplay() {
     if (!this.settings.autoplay) return;
     this.settings.autoplay = false;
     this.autoplayGeneration += 1;
-    this.autoplayTrackIdentifier = undefined;
+    this.clearAutoplayRetry();
     this.emitPlayback("settingsChanged");
   }
 
@@ -625,9 +728,6 @@ export class GuildAudioSession extends EventEmitter {
 
     const failed = track ? this.toTrack(track) : this.current;
     logger.warn("Lavalink playback error", { guildId: this.guildId, title: failed?.title, error: message });
-    if (this.settings.autoplay && activeTrack && activeTrack.identifier === this.autoplayTrackIdentifier) {
-      this.disableAutoplay();
-    }
     this.emitPlayback("error", failed, message);
     if (activeTrack && shouldSkipActiveTrack(skip, activeId, reportedId)) {
       this.recoveredTrackIds.set(activeTrack.identifier, now + 30_000);

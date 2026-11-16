@@ -19,25 +19,26 @@
     "lavalink:down": "docker compose stop lavalink"
   },
   "dependencies": {
-    "discord.js": "14.27.0",
-    "dotenv": "17.4.2",
-    "express": "5.2.1",
+    "discord.js": "14.28.1",
+    "dotenv": "18.0.10",
+    "express": "5.3.0",
     "express-rate-limit": "^8.7.4",
     "helmet": "^8.3.0",
     "ipaddr.js": "^2.5.0",
     "kazagumo": "3.4.3",
     "shoukaku": "4.3.0",
-    "socket.io": "4.8.3",
-    "zod": "4.4.3"
+    "socket.io": "4.8.4",
+    "youtubei.js": "18.3.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/express": "5.0.6",
-    "@types/node": "26.1.2",
+    "@types/node": "26.6.6",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "prettier": "^3.10.1",
-    "tsx": "4.23.1",
+    "tsx": "4.23.15",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "^8.72.2"
   },

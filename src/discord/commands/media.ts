@@ -4,6 +4,7 @@ import type { PlayerManager } from "../../player/PlayerManager.js";
 import type { Track } from "../../domain/types.js";
 import type { SpotifyClient } from "../../sources/SpotifyClient.js";
 import { assertSafePlaybackInput } from "../../sources/MediaInputGuard.js";
+import { normalizeYouTubeVideoUrl } from "../../sources/YouTubePlaylistClient.js";
 import { formatTime } from "../format.js";
 import { assertCanControlPlayback, requireVoiceChannel } from "../voiceGuard.js";
 
@@ -36,7 +37,11 @@ export async function handleMediaCommand(
         assertCanControlPlayback(interaction, djRoleId);
         const voice = await requireVoiceChannel(interaction);
         await players.connect(voice, interaction.channelId);
-        const result = await session.enqueueQuery(query, requester, players.queueLimit(guildId, requester.id));
+        const result = await session.enqueueQuery(
+          normalizeYouTubeVideoUrl(query),
+          requester,
+          players.queueLimit(guildId, requester.id)
+        );
         const titles = result.tracks
           .slice(0, 3)
           .map((track) => `**${track.title}**`)
@@ -58,9 +63,14 @@ export async function handleMediaCommand(
         assertCanControlPlayback(interaction, djRoleId);
         const voice = await requireVoiceChannel(interaction);
         await players.connect(voice, interaction.channelId);
-        const result = await session.enqueueQuery(url, requester, players.queueLimit(guildId, requester.id), limit);
+        const result = await session.enqueueYouTubePlaylist(
+          url,
+          requester,
+          players.queueLimit(guildId, requester.id),
+          limit
+        );
         await interaction.editReply(
-          `Dodano ${result.tracks.length} utworów z playlisty${result.truncated ? " (osiągnięto limit)" : ""}.`
+          `Dodano ${result.tracks.length} utworów z playlisty${result.truncated ? " (osiągnięto limit)" : ""}${result.unavailable ? ` (pominięto ${result.unavailable} niedostępnych)` : ""}.`
         );
       });
       return true;
