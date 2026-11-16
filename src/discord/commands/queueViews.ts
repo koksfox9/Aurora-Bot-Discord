@@ -5,9 +5,10 @@ import {
   EmbedBuilder,
   type ChatInputCommandInteraction
 } from "discord.js";
-import type { QueueSnapshot, Track } from "../../domain/types.js";
+import type { QueueSnapshot } from "../../domain/types.js";
 import type { PlayerManager } from "../../player/PlayerManager.js";
 import { formatTime } from "../format.js";
+import { formatTrackLine } from "../trackText.js";
 
 export async function handleQueueViewCommand(
   interaction: ChatInputCommandInteraction,
@@ -38,14 +39,14 @@ export function nowPlayingEmbed(snapshot: QueueSnapshot) {
     const progress = duration
       ? `\n${progressBar(position, duration)} ${formatTime(position)} / ${formatTime(duration)}`
       : "\nLIVE";
-    embed.setDescription(`${trackLine(snapshot.current)}${progress}`);
+    embed.setDescription(`${formatTrackLine(snapshot.current, 1_000)}${progress}`);
     if (snapshot.current.thumbnail) embed.setThumbnail(snapshot.current.thumbnail);
   } else {
     embed.setDescription("Nic aktualnie nie gra.");
   }
   embed.addFields({
     name: "Następny",
-    value: snapshot.next ? trackLine(snapshot.next) : "Kolejka jest pusta",
+    value: snapshot.next ? formatTrackLine(snapshot.next, 1_000) : "Kolejka jest pusta",
     inline: false
   });
   return embed;
@@ -58,11 +59,11 @@ export function queueEmbed(snapshot: QueueSnapshot, requestedPage: number) {
   const start = (page - 1) * pageSize;
   const lines = snapshot.queue
     .slice(start, start + pageSize)
-    .map((track, index) => `${start + index + 1}. ${trackLine(track)}`);
+    .map((track, index) => `${start + index + 1}. ${formatTrackLine(track)}`);
   const embed = new EmbedBuilder().setTitle(`Kolejka · strona ${page}/${pageCount}`).setColor(0xff8a4c);
   embed.addFields(
-    { name: "Teraz", value: snapshot.current ? trackLine(snapshot.current) : "Nic", inline: false },
-    { name: "Następne", value: lines.join("\n") || "Pusto", inline: false }
+    { name: "Teraz", value: snapshot.current ? formatTrackLine(snapshot.current, 1_000) : "Nic", inline: false },
+    { name: "Następne", value: lines.join("\n").slice(0, 1_024) || "Pusto", inline: false }
   );
   return embed;
 }
@@ -105,10 +106,4 @@ function progressBar(position: number, duration: number) {
   const steps = 18;
   const active = Math.min(steps, Math.max(0, Math.floor((position / duration) * steps)));
   return `${"━".repeat(active)}●${"─".repeat(steps - active)}`;
-}
-
-function trackLine(track: Track) {
-  const author = track.artist ? ` - ${track.artist}` : "";
-  const live = track.isLive ? " [LIVE]" : "";
-  return `**${track.title}**${author}${live}`;
 }

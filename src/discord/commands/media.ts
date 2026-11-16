@@ -6,6 +6,7 @@ import type { SpotifyClient } from "../../sources/SpotifyClient.js";
 import { assertSafePlaybackInput } from "../../sources/MediaInputGuard.js";
 import { normalizeYouTubeVideoUrl } from "../../sources/YouTubePlaylistClient.js";
 import { formatTime } from "../format.js";
+import { escapeAndTruncate } from "../trackText.js";
 import { assertCanControlPlayback, requireVoiceChannel } from "../voiceGuard.js";
 
 type Requester = { id: string; username: string };
@@ -44,7 +45,7 @@ export async function handleMediaCommand(
         );
         const titles = result.tracks
           .slice(0, 3)
-          .map((track) => `**${track.title}**`)
+          .map((track) => `**${escapeAndTruncate(track.title, 80)}**`)
           .join(", ");
         const more = result.tracks.length > 3 ? ` i ${result.tracks.length - 3} więcej` : "";
         const limitNote = result.truncated ? " (reszta przekracza limit kolejki)" : "";
@@ -133,7 +134,7 @@ export async function handleMediaCommand(
         const voice = await requireVoiceChannel(interaction);
         await players.connect(voice, interaction.channelId);
         const radio = await session.setRadio(url, name, requester);
-        await interaction.editReply(`Radio 24/7 ustawione: **${radio.title}**`);
+        await interaction.editReply(`Radio 24/7 ustawione: **${escapeAndTruncate(radio.title, 200)}**`);
       });
       return true;
     }
@@ -143,13 +144,13 @@ export async function handleMediaCommand(
   }
 }
 
-function searchResultEmbed(track: KazagumoTrack) {
+export function searchResultEmbed(track: KazagumoTrack) {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle(track.title)
+    .setTitle(escapeAndTruncate(track.title, 256))
     .setDescription(
       [
-        `Wykonawca: ${track.author ?? "nieznany"}`,
+        `Wykonawca: ${escapeAndTruncate(track.author ?? "nieznany", 512)}`,
         `Czas: ${track.isStream ? "na żywo" : formatTime(track.length ?? 0)}`,
         "Wybrany wynik nie został dodany do kolejki. Aby go odtworzyć, użyj `/play` i wybierz ten utwór."
       ].join("\n")

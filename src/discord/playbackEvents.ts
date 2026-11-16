@@ -1,6 +1,7 @@
 import type { Client } from "discord.js";
 import type { PlayerManager } from "../player/PlayerManager.js";
 import { nowPlayingComponents, nowPlayingEmbed } from "./commands/queueViews.js";
+import { escapeAndTruncate } from "./trackText.js";
 
 export function installPlaybackEventHandler(client: Client, players: PlayerManager) {
   players.on("playback", async (event) => {
@@ -31,7 +32,7 @@ export function installPlaybackEventHandler(client: Client, players: PlayerManag
         }
       } else if (event.type === "error") {
         await channel.send(
-          `Nie udało się odtworzyć **${event.track.title}**. Pomijam ten utwór i próbuję kontynuować.`
+          `Nie udało się odtworzyć **${escapeAndTruncate(event.track.title, 200)}**. Pomijam ten utwór i próbuję kontynuować.`
         );
       }
     } catch {
