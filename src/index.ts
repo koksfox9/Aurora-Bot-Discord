@@ -32,7 +32,8 @@ async function main() {
   await spotify.init();
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+    allowedMentions: { parse: [] }
   });
 
   client.on(Events.Error, (error) => {

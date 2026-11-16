@@ -26,11 +26,11 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 
 ### Priorytet 2 – stabilność i bezpieczeństwo
 
-- [ ] **P4. Nieaktualny kanał ogłoszeń blokuje `/play` na całym serwerze** [z kodu]
-  - Przy braku kanału/uprawnień pominąć ogłoszenia (ostrzeżenie w logu) zamiast rzucać błąd w `connect()`.
-  - Ujednolicić uprawnienia w `/musictextchannel` i `connect()` (View + Send + EmbedLinks).
-- [ ] **P5. Brak `allowedMentions`** [z kodu]
-  - Dodać `allowedMentions: { parse: [] }` w `new Client(...)`.
+- [x] **P4. Nieaktualny kanał ogłoszeń blokuje `/play` na całym serwerze**
+  - Nieprawidłowy lub niedostępny kanał pomija ogłoszenia i zapisuje ostrzeżenie; połączenie głosowe i odtwarzanie mogą działać dalej.
+  - `/musictextchannel` i `connect()` wymagają View, Send i EmbedLinks; kanały są walidowane przed aktualizacją sesji.
+- [x] **P5. Brak `allowedMentions`**
+  - Klient Discord ma `allowedMentions: { parse: [] }`.
 - [ ] **P6. `/skip` przy `loop track` odtwarza ten sam utwór** [odtworzone]
   - Na czas skipu wyłączyć pętlę utworu i przywrócić po starcie następnego (nie dotyczy radia).
 - [ ] **P7. Autocomplete w `/play` bez limitu** [z kodu]

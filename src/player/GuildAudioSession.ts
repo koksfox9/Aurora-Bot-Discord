@@ -54,8 +54,6 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   async connect(channel: VoiceBasedChannel, textChannelId?: string) {
-    this.textChannelId = textChannelId ?? this.textChannelId;
-    this.voiceChannel = channel;
     if (this.connectTask) await this.connectTask;
 
     const botMember = channel.guild.members.me;
@@ -64,10 +62,12 @@ export class GuildAudioSession extends EventEmitter {
       throw new Error("Bot potrzebuje uprawnień Połącz i Mów na tym kanale głosowym.");
     }
 
-    if (this.textChannelId) {
+    const requestedTextChannelId = textChannelId ?? this.textChannelId;
+    let validTextChannelId: string | undefined;
+    if (requestedTextChannelId) {
       const textChannel =
-        channel.guild.channels.cache.get(this.textChannelId) ??
-        (await channel.guild.channels.fetch(this.textChannelId).catch(() => null));
+        channel.guild.channels.cache.get(requestedTextChannelId) ??
+        (await channel.guild.channels.fetch(requestedTextChannelId).catch(() => null));
       const botId = botMember?.id ?? this.botUserId;
       const textPermissions = textChannel?.isTextBased() && botId ? textChannel.permissionsFor(botId) : null;
       if (
@@ -78,11 +78,17 @@ export class GuildAudioSession extends EventEmitter {
           PermissionFlagsBits.EmbedLinks
         ])
       ) {
-        throw new Error(
-          "Bot potrzebuje uprawnień Wyświetlanie kanału, Wysyłanie wiadomości i Osadzanie linków na kanale ogłoszeń."
-        );
+        logger.warn("Announcement channel is unavailable; playback will continue without announcements", {
+          guildId: this.guildId,
+          textChannelId: requestedTextChannelId
+        });
+      } else {
+        validTextChannelId = requestedTextChannelId;
       }
     }
+
+    this.textChannelId = validTextChannelId;
+    this.voiceChannel = channel;
 
     const task = (async () => {
       let player = this.kazagumo.getPlayer(this.guildId);
@@ -90,12 +96,12 @@ export class GuildAudioSession extends EventEmitter {
         player = await this.kazagumo.createPlayer({
           guildId: this.guildId,
           voiceId: channel.id,
-          textId: this.textChannelId,
+          textId: validTextChannelId,
           volume: Math.round(this.settings.volume * 100),
           deaf: false
         });
       } else {
-        if (this.textChannelId) player.setTextChannel(this.textChannelId);
+        if (validTextChannelId) player.setTextChannel(validTextChannelId);
         if (player.voiceId !== channel.id) player.setVoiceChannel(channel.id);
         else if (player.state === PlayerState.DISCONNECTED) player.connect();
       }

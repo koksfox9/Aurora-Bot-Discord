@@ -37,9 +37,15 @@ export async function handleGuildSettingsCommand(interaction: ChatInputCommandIn
         if (
           !botMember ||
           !channel.isTextBased() ||
-          !channel.permissionsFor(botMember).has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])
+          !channel.permissionsFor(botMember).has([
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.EmbedLinks
+          ])
         ) {
-          throw new Error("Bot potrzebuje uprawnień Wyświetlanie kanału i Wysyłanie wiadomości na wybranym kanale.");
+          throw new Error(
+            "Bot potrzebuje uprawnień Wyświetlanie kanału, Wysyłanie wiadomości i Osadzanie linków na wybranym kanale."
+          );
         }
       }
       await players.setGuildTextChannelId(guildId, channel?.id);
