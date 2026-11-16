@@ -30,6 +30,7 @@ export class GuildAudioSession extends EventEmitter {
   private readonly history: Track[] = [];
   private readonly recoveredTrackIds = new Map<string, number>();
   private lastFailureSkip?: { trackId: string; at: number };
+  private restoreTrackLoopAfterSkip = false;
   private autoplayGeneration = 0;
   private autoplayTask?: Promise<void>;
   private autoplayRetryTimer?: NodeJS.Timeout;
@@ -446,9 +447,14 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   skip() {
-    if (!this.player?.queue.current) return false;
+    const player = this.player;
+    if (!player?.queue.current) return false;
     this.clearSkipVotes();
-    this.player.skip();
+    if (player.loop === "track" && !this.radio) {
+      player.setLoop("none");
+      this.restoreTrackLoopAfterSkip = true;
+    }
+    player.skip();
     return true;
   }
 
@@ -587,6 +593,10 @@ export class GuildAudioSession extends EventEmitter {
   onTrackStart(track: KazagumoTrack) {
     this.clearSkipVotes();
     this.clearIdleTimer();
+    if (this.restoreTrackLoopAfterSkip && !this.radio) {
+      this.player?.setLoop("track");
+      this.restoreTrackLoopAfterSkip = false;
+    }
     const mapped = this.toTrack(track);
     this.current = mapped.id === this.radio?.id ? this.radio : mapped;
     this.emitPlayback("trackStart", this.current);
@@ -608,6 +618,10 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   onPlayerEmpty() {
+    if (this.restoreTrackLoopAfterSkip && !this.radio) {
+      this.player?.setLoop("track");
+      this.restoreTrackLoopAfterSkip = false;
+    }
     if (this.settings.autoplay) {
       if (!this.autoplayTask) {
         const task = this.startAutoplay().finally(() => {

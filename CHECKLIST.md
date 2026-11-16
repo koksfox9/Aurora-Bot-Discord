@@ -31,8 +31,8 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
   - `/musictextchannel` i `connect()` wymagają View, Send i EmbedLinks; kanały są walidowane przed aktualizacją sesji.
 - [x] **P5. Brak `allowedMentions`**
   - Klient Discord ma `allowedMentions: { parse: [] }`.
-- [ ] **P6. `/skip` przy `loop track` odtwarza ten sam utwór** [odtworzone]
-  - Na czas skipu wyłączyć pętlę utworu i przywrócić po starcie następnego (nie dotyczy radia).
+- [x] **P6. `/skip` przy `loop track` odtwarza ten sam utwór**
+  - Pętla utworu jest wyłączana tylko na czas skipu i przywracana po starcie następnego utworu (radio pozostaje bez zmian); testy obu przypadków przechodzą.
 - [ ] **P7. Autocomplete w `/play` bez limitu** [z kodu]
   - Limit na użytkownika, pamięć podręczna wyników (30–60 s), deduplikacja zapytań w toku.
 - [ ] **P8. Błędy walidacji w panelu jako 500** [z kodu]
