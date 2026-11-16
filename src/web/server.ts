@@ -12,6 +12,7 @@ import type { PlayerManager } from "../player/PlayerManager.js";
 import type { SpotifyClient } from "../sources/SpotifyClient.js";
 import { assertSafePlaybackInput, assertSafeRadioUrl } from "../sources/MediaInputGuard.js";
 import { logger } from "../logger.js";
+import { asPanelRequestError, PanelRequestError, panelErrorResponse } from "./PanelRequestError.js";
 
 const PANEL_QUEUE_LIMIT = 50;
 const PLAYBACK_DEBOUNCE_MS = 100;
@@ -48,7 +49,7 @@ export function startWebServer(config: AppConfig, players: PlayerManager, spotif
     try {
       const code = String(req.query.code ?? "");
       const state = String(req.query.state ?? "");
-      if (!code || !state) throw new Error("Missing Spotify OAuth code/state");
+      if (!code || !state) throw new PanelRequestError("Brak kodu lub stanu autoryzacji Spotify.");
       await spotify.finishAuthorization(code, state);
       res.type("html").send("<h1>Spotify polaczone</h1><p>Możesz wrócić do Discorda.</p>");
     } catch (error) {
@@ -65,16 +66,15 @@ export function startWebServer(config: AppConfig, players: PlayerManager, spotif
   }
 
   app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
-    const hintedStatus = (error as Error & { status?: unknown }).status;
-    const status = typeof hintedStatus === "number" && hintedStatus >= 400 && hintedStatus < 500 ? hintedStatus : 500;
+    const response = panelErrorResponse(error);
     logger.error("Web request failed", {
       method: _req.method,
       path: _req.path,
-      status,
-      error: error.message,
-      stack: error.stack
+      status: response.status,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
     });
-    res.status(status).json({ error: status < 500 ? "Nieprawidłowe żądanie." : "Wewnętrzny błąd serwera." });
+    res.status(response.status).json(response.body);
   });
 
   server.listen(config.web.port, config.web.host, () => {
@@ -164,11 +164,12 @@ function mountPanel(
   app.post("/api/guilds/:guildId/connect", requirePanelToken(config), async (req, res, next) => {
     try {
       const guildId = param(req, "guildId");
-      const channelId = String(req.body.channelId ?? "");
-      if (!channelId) throw new Error("Wybierz kanal glosowy.");
-      const channel = await client.channels.fetch(channelId);
+      const body = requestBody(req);
+      const channelId = String(body.channelId ?? "");
+      if (!channelId) throw new PanelRequestError("Wybierz kanał głosowy.");
+      const channel = await client.channels.fetch(channelId).catch(() => null);
       if (!channel?.isVoiceBased() || channel.guildId !== guildId) {
-        throw new Error("Wybrany kanal glosowy nie nalezy do tego serwera.");
+        throw new PanelRequestError("Wybrany kanał głosowy nie należy do tego serwera.");
       }
       await players.connect(channel as VoiceBasedChannel);
       res.json(panelSnapshot(players.snapshot(guildId)));
@@ -179,13 +180,18 @@ function mountPanel(
 
   app.post("/api/guilds/:guildId/play", requirePanelToken(config), async (req, res, next) => {
     try {
-      const query = String(req.body.query ?? "").trim();
-      if (!query) throw new Error("Brak utworu.");
+      const body = requestBody(req);
+      const query = String(body.query ?? "").trim();
+      if (!query) throw new PanelRequestError("Brak utworu.");
       const guildId = param(req, "guildId");
-      assertSafePlaybackInput(query);
+      try {
+        assertSafePlaybackInput(query);
+      } catch (error) {
+        throw asPanelRequestError(error, "Podany utwór jest nieprawidłowy.");
+      }
       const snapshot = await players.runMediaRequest(guildId, async () => {
         const session = players.getOrCreate(guildId);
-        if (!session.snapshot().connected) throw new Error("Najpierw połącz bota z kanałem głosowym.");
+        if (!session.snapshot().connected) throw new PanelRequestError("Najpierw połącz bota z kanałem głosowym.");
         await session.enqueueQuery(query, { id: "web-panel", username: "Web UI" }, players.queueLimit(guildId));
         return players.snapshot(guildId);
       });
@@ -197,15 +203,20 @@ function mountPanel(
 
   app.post("/api/guilds/:guildId/radio", requirePanelToken(config), async (req, res, next) => {
     try {
-      const url = String(req.body.url ?? "").trim();
-      const name = String(req.body.name ?? "").trim() || undefined;
-      if (!url) throw new Error("Brak adresu radia.");
+      const body = requestBody(req);
+      const url = String(body.url ?? "").trim();
+      const name = String(body.name ?? "").trim() || undefined;
+      if (!url) throw new PanelRequestError("Brak adresu radia.");
       const guildId = param(req, "guildId");
-      if (!players.isPremium(guildId)) throw new Error("Radio 24/7 jest dostępne w planie Premium.");
-      await assertSafeRadioUrl(url, config.media.radioAllowedDomains);
+      if (!players.isPremium(guildId)) throw new PanelRequestError("Radio 24/7 jest dostępne w planie Premium.");
+      try {
+        await assertSafeRadioUrl(url, config.media.radioAllowedDomains);
+      } catch (error) {
+        throw asPanelRequestError(error, "Adres radia jest nieprawidłowy.");
+      }
       const snapshot = await players.runMediaRequest(guildId, async () => {
         const session = players.getOrCreate(guildId);
-        if (!session.snapshot().connected) throw new Error("Najpierw połącz bota z kanałem głosowym.");
+        if (!session.snapshot().connected) throw new PanelRequestError("Najpierw połącz bota z kanałem głosowym.");
         await session.setRadio(url, name, { id: "web-panel", username: "Web UI" });
         return players.snapshot(guildId);
       });
@@ -237,9 +248,12 @@ function mountPanel(
 
   app.post("/api/guilds/:guildId/filter", requirePanelToken(config), async (req, res, next) => {
     try {
-      if (!players.isPremium(param(req, "guildId"))) throw new Error("Efekty DSP są dostępne w planie Premium.");
-      const mode = String(req.body.mode ?? "off");
-      if (!["off", "bassboost", "nightcore", "8d"].includes(mode)) throw new Error("Nieznany efekt dźwiękowy.");
+      if (!players.isPremium(param(req, "guildId")))
+        throw new PanelRequestError("Efekty DSP są dostępne w planie Premium.");
+      const mode = String(requestBody(req).mode ?? "off");
+      if (!["off", "bassboost", "nightcore", "8d"].includes(mode)) {
+        throw new PanelRequestError("Nieznany efekt dźwiękowy.");
+      }
       await players.getOrCreate(param(req, "guildId")).setFilter(mode as "off" | "bassboost" | "nightcore" | "8d");
       res.json(panelSnapshot(players.snapshot(param(req, "guildId"))));
     } catch (error) {
@@ -267,12 +281,19 @@ function mountPanel(
 
   app.post("/api/guilds/:guildId/settings", requirePanelToken(config), (req, res) => {
     const guildId = param(req, "guildId");
-    if (req.body.stayInChannel === true && !players.isPremium(guildId)) {
-      throw new Error("Tryb 24/7 jest dostępny w planie Premium.");
+    const body = requestBody(req);
+    if (body.stayInChannel === true && !players.isPremium(guildId)) {
+      throw new PanelRequestError("Tryb 24/7 jest dostępny w planie Premium.");
+    }
+    if ("volume" in body && (typeof body.volume !== "number" || body.volume < 1 || body.volume > 100)) {
+      throw new PanelRequestError("Głośność musi być liczbą od 1 do 100.");
+    }
+    if ("stayInChannel" in body && typeof body.stayInChannel !== "boolean") {
+      throw new PanelRequestError("Tryb 24/7 musi mieć wartość prawda lub fałsz.");
     }
     players.getOrCreate(guildId).setSettings({
-      volume: typeof req.body.volume === "number" ? req.body.volume : undefined,
-      stayInChannel: typeof req.body.stayInChannel === "boolean" ? req.body.stayInChannel : undefined
+      volume: typeof body.volume === "number" ? body.volume : undefined,
+      stayInChannel: typeof body.stayInChannel === "boolean" ? body.stayInChannel : undefined
     });
     res.json(panelSnapshot(players.snapshot(guildId)));
   });
@@ -389,4 +410,11 @@ function tokensMatch(provided: unknown, expected: string | undefined) {
 function param(req: Request, name: string) {
   const value = req.params[name];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function requestBody(req: Request): Record<string, unknown> {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    throw new PanelRequestError("Treść żądania musi być obiektem JSON.");
+  }
+  return req.body as Record<string, unknown>;
 }

@@ -36,8 +36,9 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 - [x] **P7. Autocomplete w `/play` bez limitu** [z kodu]
   - Limit 750 ms na użytkownika, pamięć podręczna wyników przez 45 s i deduplikacja identycznych zapytań w toku.
   - Testy obejmują limit, cache, deduplikację oraz ponowienie po błędzie wyszukiwania.
-- [ ] **P8. Błędy walidacji w panelu jako 500** [z kodu]
+- [x] **P8. Błędy walidacji w panelu jako 500** [z kodu]
   - Klasa błędu z kodem 400 i bezpieczną treścią; 500 tylko dla prawdziwych awarii.
+  - Walidacja obejmuje pola panelu, dozwolone wartości, JSON body oraz bezpieczne linki; testy rozróżniają odpowiedzi 400 i 500.
 - [ ] **P9. `playerClosed` pomija bieżący utwór, także przy odzyskiwalnych zamknięciach** [z kodu]
   - Nie pomijać utworu przy odzyskiwalnych kodach; tylko logować i informować.
   - Wymaga testu na żywo (zmiana serwera głosowego).
