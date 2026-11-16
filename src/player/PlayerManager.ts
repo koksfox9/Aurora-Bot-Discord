@@ -4,6 +4,7 @@ import type { Kazagumo, KazagumoTrack } from "kazagumo";
 import type { AppConfig } from "../config.js";
 import type { PersistedGuildPlaybackState, PlaybackEvent, QueueSnapshot } from "../domain/types.js";
 import { logger } from "../logger.js";
+import { AutocompleteSearchCache } from "../discord/AutocompleteSearchCache.js";
 import { readJsonFile, writeJsonFileAtomic } from "../utils/fs.js";
 import { GuildAudioSession } from "./GuildAudioSession.js";
 
@@ -32,6 +33,7 @@ interface GuildSettingsDocument {
 }
 
 export class PlayerManager extends EventEmitter {
+  private readonly autocompleteSearches = new AutocompleteSearchCache<KazagumoTrack[]>();
   private readonly sessions = new Map<string, GuildAudioSession>();
   private readonly mediaRequestQueues = new Map<string, MediaRequestQueue>();
   private persistedGuilds: Record<string, PersistedGuildPlaybackState> = {};
@@ -199,17 +201,20 @@ export class PlayerManager extends EventEmitter {
   }
 
   async searchAutocompleteTracks(query: string, requester: { id: string; username: string }): Promise<KazagumoTrack[]> {
-    let timeout: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<never>((_resolve, reject) => {
-      timeout = setTimeout(() => reject(new Error("Autocomplete search timed out")), 1800);
-      timeout.unref();
+    const tracks = await this.autocompleteSearches.get(query, requester.id, async () => {
+      let timeout: NodeJS.Timeout | undefined;
+      const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Autocomplete search timed out")), 1800);
+        timeout.unref();
+      });
+      try {
+        const result = await Promise.race([this.kazagumo.search(`ytmsearch:${query}`, { requester }), timeoutPromise]);
+        return result.tracks.slice(0, 25);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
     });
-    try {
-      const result = await Promise.race([this.kazagumo.search(`ytmsearch:${query}`, { requester }), timeoutPromise]);
-      return result.tracks.slice(0, 25);
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
+    return tracks ?? [];
   }
 
   async resolveSearchTrack(query: string, requester: { id: string; username: string }): Promise<KazagumoTrack> {

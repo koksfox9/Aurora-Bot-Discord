@@ -33,8 +33,9 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
   - Klient Discord ma `allowedMentions: { parse: [] }`.
 - [x] **P6. `/skip` przy `loop track` odtwarza ten sam utwór**
   - Pętla utworu jest wyłączana tylko na czas skipu i przywracana po starcie następnego utworu (radio pozostaje bez zmian); testy obu przypadków przechodzą.
-- [ ] **P7. Autocomplete w `/play` bez limitu** [z kodu]
-  - Limit na użytkownika, pamięć podręczna wyników (30–60 s), deduplikacja zapytań w toku.
+- [x] **P7. Autocomplete w `/play` bez limitu** [z kodu]
+  - Limit 750 ms na użytkownika, pamięć podręczna wyników przez 45 s i deduplikacja identycznych zapytań w toku.
+  - Testy obejmują limit, cache, deduplikację oraz ponowienie po błędzie wyszukiwania.
 - [ ] **P8. Błędy walidacji w panelu jako 500** [z kodu]
   - Klasa błędu z kodem 400 i bezpieczną treścią; 500 tylko dla prawdziwych awarii.
 - [ ] **P9. `playerClosed` pomija bieżący utwór, także przy odzyskiwalnych zamknięciach** [z kodu]
