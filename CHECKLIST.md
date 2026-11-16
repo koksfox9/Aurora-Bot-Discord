@@ -16,9 +16,9 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
   - `setRadio` ustawia `loop=track` przed `skip()`, więc Kazagumo wraca do starego utworu; dotyczy też zmiany stacji.
   - Zmiana: `player.play(track, { replaceCurrent: true })`, dopiero potem `setLoop("track")`; nie ma już `skip()` poprzedniego utworu.
   - Test: radio przy grającym utworze, radio → radio, radio bez grającego utworu (3/3).
-- [ ] **P2. Zależności z podatnościami (22, w tym 1 krytyczna, 9 wysokich)** [odtworzone]
-  - Podnieść `express 5.3.0`, `socket.io 4.8.4`, `discord.js 14.28.1`, `zod 4.6.7`, potem `pnpm update --depth Infinity` dla zależności pośrednich.
-  - Test: `pnpm audit --prod` bez podatności; `check`, `lint`, `format:check`, `test`, `build` przechodzą.
+- [x] **P2. Zależności z podatnościami (22, w tym 1 krytyczna, 9 wysokich)**
+  - Zaktualizowano bezpośrednie i pośrednie zależności, w tym `express 5.3.0`, `socket.io 4.8.4`, `discord.js 14.28.1` oraz `zod 4.6.7`.
+  - Test: `pnpm audit --prod` nie zgłasza podatności; `check`, `lint`, `format:check`, `test`, `build` przechodzą.
 - [ ] **P3. `/queue` wysypuje się przy długich tytułach, tytuły nie są escapowane** [odtworzone]
   - Przyciąć linie (ok. 90 znaków) i pole embeda (1024); `escapeMarkdown` dla tytułów w embedach i odpowiedziach.
   - Dotyczy też `nowPlayingEmbed`, `searchResultEmbed`.

@@ -171,12 +171,7 @@ export class GuildAudioSession extends EventEmitter {
     return { tracks: added, truncated: result.tracks.length > tracks.length };
   }
 
-  async enqueueYouTubePlaylist(
-    query: string,
-    requester: Requester,
-    maxQueue: number,
-    maxTracksToAdd = maxQueue
-  ) {
+  async enqueueYouTubePlaylist(query: string, requester: Requester, maxQueue: number, maxTracksToAdd = maxQueue) {
     const player = this.requirePlayer();
     assertSafePlaybackInput(query);
     const playlistId = getYouTubePlaylistId(query);
@@ -194,9 +189,12 @@ export class GuildAudioSession extends EventEmitter {
         playlistId,
         error: error instanceof Error ? error.message : String(error)
       });
-      throw new Error("Nie udało się odczytać playlisty YouTube. Sprawdź, czy jest publiczna lub dostępna przez link.", {
-        cause: error
-      });
+      throw new Error(
+        "Nie udało się odczytać playlisty YouTube. Sprawdź, czy jest publiczna lub dostępna przez link.",
+        {
+          cause: error
+        }
+      );
     }
 
     if (playlist.videoIds.length === 0) throw new Error("Ta playlista YouTube nie zawiera dostępnych utworów.");
