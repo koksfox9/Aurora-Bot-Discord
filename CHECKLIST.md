@@ -1,9 +1,81 @@
-# Aurora Music Bot – checklista usprawnień
+# Aurora Music Bot – checklista
+
+Prace idą punkt po punkcie: jeden punkt naraz, kolejny dopiero po potwierdzeniu.
+Odhaczone `[x]` = zrobione i wrzucone do repo. Oznaczenia: **[odtworzone]** – błąd potwierdzony
+testem, **[z kodu]** – wynika z czytania kodu, do potwierdzenia na żywo.
+
+## Etap 2 – plan po przeglądzie kodu
+
+### Kolejność realizacji
+
+P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teście na żywo) → drobne → kod/testy/dokumentacja.
+
+### Priorytet 1 – zepsute funkcje i luki
+
+- [ ] **P1. `/radio` nie przełącza na radio, gdy coś gra** [odtworzone]
+  - `setRadio` ustawia `loop=track` przed `skip()`, więc Kazagumo wraca do starego utworu; dotyczy też zmiany stacji.
+  - Zmiana: `player.play(track, { replaceCurrent: true })`, dopiero potem `setLoop("track")`.
+  - Test: radio przy grającym utworze, radio → radio, radio bez grającego utworu.
+- [ ] **P2. Zależności z podatnościami (22, w tym 1 krytyczna, 9 wysokich)** [odtworzone]
+  - Podnieść `express 5.3.0`, `socket.io 4.8.4`, `discord.js 14.28.1`, `zod 4.6.7`, potem `pnpm update --depth Infinity` dla zależności pośrednich.
+  - Test: `pnpm audit --prod` bez podatności; `check`, `lint`, `format:check`, `test`, `build` przechodzą.
+- [ ] **P3. `/queue` wysypuje się przy długich tytułach, tytuły nie są escapowane** [odtworzone]
+  - Przyciąć linie (ok. 90 znaków) i pole embeda (1024); `escapeMarkdown` dla tytułów w embedach i odpowiedziach.
+  - Dotyczy też `nowPlayingEmbed`, `searchResultEmbed`.
+  - Test: 10 utworów po 100 znaków; tytuł z `[tekst](url)`.
+
+### Priorytet 2 – stabilność i bezpieczeństwo
+
+- [ ] **P4. Nieaktualny kanał ogłoszeń blokuje `/play` na całym serwerze** [z kodu]
+  - Przy braku kanału/uprawnień pominąć ogłoszenia (ostrzeżenie w logu) zamiast rzucać błąd w `connect()`.
+  - Ujednolicić uprawnienia w `/musictextchannel` i `connect()` (View + Send + EmbedLinks).
+- [ ] **P5. Brak `allowedMentions`** [z kodu]
+  - Dodać `allowedMentions: { parse: [] }` w `new Client(...)`.
+- [ ] **P6. `/skip` przy `loop track` odtwarza ten sam utwór** [odtworzone]
+  - Na czas skipu wyłączyć pętlę utworu i przywrócić po starcie następnego (nie dotyczy radia).
+- [ ] **P7. Autocomplete w `/play` bez limitu** [z kodu]
+  - Limit na użytkownika, pamięć podręczna wyników (30–60 s), deduplikacja zapytań w toku.
+- [ ] **P8. Błędy walidacji w panelu jako 500** [z kodu]
+  - Klasa błędu z kodem 400 i bezpieczną treścią; 500 tylko dla prawdziwych awarii.
+- [ ] **P9. `playerClosed` pomija bieżący utwór, także przy odzyskiwalnych zamknięciach** [z kodu]
+  - Nie pomijać utworu przy odzyskiwalnych kodach; tylko logować i informować.
+  - Wymaga testu na żywo (zmiana serwera głosowego).
+- [ ] **P10. Zamykanie bez limitu czasu** [z kodu]
+  - Limit 8–10 s na oczekiwanie w `players.shutdown()` i watchdog `process.exit(1)` w `index.ts`.
+- [ ] **P11. Pluginy Lavalinka nie są trwałe** [z kodu]
+  - Wolumin na `/opt/Lavalink/plugins` w `compose.yaml`.
+- [ ] **P12. Po 120 nieudanych próbach Lavalink nie wraca** [z kodu]
+  - Po ostatnim `disconnect` zakończyć proces (`exit(1)`) albo dodać węzeł od nowa.
+
+### Priorytet 3 – drobne poprawki
+
+- [ ] Po nieudanym pierwszym `/play` zaplanować rozłączenie bezczynnego bota (`scheduleIdleDisconnect`)
+- [ ] `connect()`: ustawiać `voiceChannel` i `textChannelId` dopiero po sprawdzeniu uprawnień
+- [ ] Walidować ID playlisty Spotify (`^[A-Za-z0-9]{22}$`) i kodować je w URL
+- [ ] `setMaxLength` w opcjach tekstowych (nazwa radia ok. 100, `query` i `url` ok. 500)
+- [ ] Serializować ogłoszenia „Teraz gra" per serwer (bez duplikatów)
+- [ ] `/lyrics`: czyścić tytuł i autora (Official Video, „- Topic", VEVO), zapasowe `/api/search`, usuwać znaczniki czasu z wersji „synced"
+- [ ] `setContexts(Guild)` dla komend (bez działania w DM)
+- [ ] Zdeduplikować odświeżanie tokenu Spotify; `SkipVoteTracker` bez głosów osób, które wyszły z kanału
+- [ ] Czyścić zapisany stan dla niedostępnych kanałów; `restoreSavedPlayback` nie powinno blokować `/play` do końca przywracania
+
+### Kod, testy i dokumentacja
+
+- [ ] Wspólna funkcja zapisu ustawień serwera (5 prawie identycznych bloków w `PlayerManager`)
+- [ ] Usunąć nieużywane `writeJsonFile` i `fileExists` z `fs.ts`
+- [ ] Testy: `voiceGuard`, `MediaInputGuard`, autoryzacja panelu, `setRadio`/`skip` na prawdziwym `KazagumoPlayer` z atrapą Lavalinka
+- [ ] Ujednolicić Node w CI i środowisku (CI 24, `engines` i Docker 22); akcje GitHub przypiąć do SHA
+- [ ] README: usunąć „unbounded queues", opisać uprawnienia kanału ogłoszeń i wolumin pluginów
+- [ ] Polskie znaki w stringach panelu (`public/app.js`, `public/index.html`)
+
+---
+
+## Etap 1 – zakończony
 
 Prace idą punkt po punkcie: jeden punkt naraz, kolejny dopiero po potwierdzeniu.
 Odhaczone `[x]` = zrobione i wrzucone do repo.
 
-## Kolejność realizacji
+### Kolejność realizacji
 
 1. ~~Kontrola dostępu do sterowania botem (kanał głosowy)~~ – zrobione
 2. ~~Naprawa `/seek` (milisekundy zamiast sekund)~~ – zrobione
@@ -14,7 +86,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 7. ~~Obsługa przeniesienia/wyrzucenia bota z kanału + `resume` w Shoukaku~~ – zrobione
 8. Pozostałe punkty poniżej, według uznania
 
-## Stabilność
+### Stabilność
 
 - [x] Naprawić `/seek` (milisekundy zamiast sekund)
 - [x] Włączyć `resume`, `resumeTimeout`, `resumeByLibrary` w Shoukaku
@@ -27,7 +99,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 - [x] Zamiast blokady `pendingMediaRequests` zrobić kolejkę żądań per serwer
 - [x] Zapisywać stan (kolejka, 24/7, radio, głośność) i przywracać go po restarcie
 
-## Wydajność
+### Wydajność
 
 - [x] Socket.IO: pokoje per serwer zamiast globalnego `io.emit`
 - [x] Wysyłać obciętą kolejkę (np. 50) i debounce zdarzeń
@@ -37,7 +109,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 - [x] Przetestować i skrócić listę `clients` YouTube w `application.yml` (pozostawiono `MUSIC` i sprawdzony `IOS`)
 - [x] Ocenić drugi węzeł Lavalinka i `nodeResolver` (failover): odłożone do czasu uruchomienia drugiego węzła i aktualizacji Shoukaku
 
-## Funkcjonalności
+### Funkcjonalności
 
 - [x] `/remove` (numer pozycji od 1; aktualny utwór nie jest pozycją kolejki)
 - [x] `/move` (pozycje oczekujących utworów liczone od 1)
@@ -57,7 +129,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 - [x] Sprawdzać uprawnienia bota do wysyłania wiadomości i embedów na kanale ogłoszeń przed połączeniem
 - [x] Zostawić jedną komendę do podglądu utworu: `/nowplaying` (rejestracja komend usuwa stare aliasy)
 
-## Bezpieczeństwo
+### Bezpieczeństwo
 
 - [x] Sprawdzać obecność użytkownika na kanale bota przed `skip/stop/leave/pause/volume/loop/shuffle/seek/filter` i dla przycisków (+ `join/play/playlist/spotify-playlist/radio/mode24h`)
 - [x] Uczynić `WEB_PANEL_TOKEN` wymaganym (zod) lub nie uruchamiać panelu bez niego
@@ -71,7 +143,7 @@ Odhaczone `[x]` = zrobione i wrzucone do repo.
 - [x] Przy YouTube OAuth użyć osobnego konta Google; refresh token zapisany w prywatnym `.env.youtube` (tryb `0600`), a Lavalink potwierdził jego odświeżenie. Konto pomocnicze ogranicza ryzyko głównego konta, ale nie wyklucza blokady.
 - [x] Zweryfikować historię `.env` — nie jest śledzony obecnie ani w historii lokalnej i jedynej gałęzi GitHuba (`main`); rotacja tokenu bota i hasła Lavalinka z tego powodu nie jest wymagana
 
-## Kod i architektura
+### Kod i architektura
 
 - [x] Usunąć `.pnpm-store/` z repo i dopisać do `.gitignore`
 - [x] (opcjonalnie) Przepisać historię Git, usuwając `.pnpm-store/` z całej historii `main` (5 132 pliki, 84,3 MB); wymuszony push wykonano z lease
