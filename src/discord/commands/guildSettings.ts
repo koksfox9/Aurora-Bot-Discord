@@ -37,11 +37,9 @@ export async function handleGuildSettingsCommand(interaction: ChatInputCommandIn
         if (
           !botMember ||
           !channel.isTextBased() ||
-          !channel.permissionsFor(botMember).has([
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.EmbedLinks
-          ])
+          !channel
+            .permissionsFor(botMember)
+            .has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])
         ) {
           throw new Error(
             "Bot potrzebuje uprawnień Wyświetlanie kanału, Wysyłanie wiadomości i Osadzanie linków na wybranym kanale."
