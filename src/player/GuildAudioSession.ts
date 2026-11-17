@@ -537,6 +537,7 @@ export class GuildAudioSession extends EventEmitter {
     // Kazagumo/Lavalink oczekują pozycji w milisekundach.
     const targetMs = Math.max(0, Math.min(seconds * 1000, current.length ?? 0));
     await player.seek(targetMs);
+    this.emitPlayback("settingsChanged");
     return Math.floor(targetMs / 1000);
   }
 

@@ -8,7 +8,7 @@ import {
 import type { QueueSnapshot } from "../../domain/types.js";
 import type { PlayerManager } from "../../player/PlayerManager.js";
 import { formatTime } from "../format.js";
-import { formatTrackLine } from "../trackText.js";
+import { escapeAndTruncate, formatTrackLine, truncate } from "../trackText.js";
 
 export async function handleQueueViewCommand(
   interaction: ChatInputCommandInteraction,
@@ -26,30 +26,80 @@ export async function handleQueueViewCommand(
       components: queuePageButtons(currentPage, pageCount)
     });
   } else {
-    await interaction.reply({ embeds: [nowPlayingEmbed(snapshot)], components: nowPlayingComponents(snapshot) });
+    await interaction.reply(nowPlayingPayload(snapshot));
   }
   return true;
 }
 
+const COLORS = { playing: 0x23a6a6, paused: 0xf0a232, idle: 0x6d6f78 } as const;
+const PROGRESS_CELLS = 12;
+const TITLE_LIMIT = 80;
+const ARTIST_LIMIT = 80;
+const NEXT_LIMIT = 80;
+const LOOP_LABELS = { none: "Wyłączone", queue: "Kolejka", track: "Utwór" } as const;
+const SOURCE_LABELS = { youtube: "YouTube", spotify: "Spotify", direct: "Link" } as const;
+
+export function isRadioPlaying(snapshot: QueueSnapshot) {
+  return Boolean(snapshot.current && snapshot.radio && snapshot.radio.id === snapshot.current.id);
+}
+
+export function nowPlayingPayload(snapshot: QueueSnapshot) {
+  return { embeds: [nowPlayingEmbed(snapshot)], components: nowPlayingComponents(snapshot) };
+}
+
 export function nowPlayingEmbed(snapshot: QueueSnapshot) {
-  const embed = new EmbedBuilder().setTitle("Teraz gra").setColor(0x23a6a6);
-  if (snapshot.current) {
-    const duration = snapshot.current.durationMs;
-    const position = snapshot.positionMs;
-    const progress = duration
-      ? `\n${progressBar(position, duration)} ${formatTime(position)} / ${formatTime(duration)}`
-      : "\nLIVE";
-    embed.setDescription(`${formatTrackLine(snapshot.current, 1_000)}${progress}`);
-    if (snapshot.current.thumbnail) embed.setThumbnail(snapshot.current.thumbnail);
-  } else {
-    embed.setDescription("Nic aktualnie nie gra.");
-  }
-  embed.addFields({
-    name: "Następny",
-    value: snapshot.next ? formatTrackLine(snapshot.next, 1_000) : "Kolejka jest pusta",
-    inline: false
-  });
+  const current = snapshot.current;
+  if (!current) return idleEmbed(snapshot);
+
+  const radio = isRadioPlaying(snapshot);
+  const live = Boolean(current.isLive) || radio;
+  const duration = live ? undefined : current.durationMs;
+  const position = Math.max(0, duration ? Math.min(snapshot.positionMs, duration) : snapshot.positionMs);
+
+  const embed = new EmbedBuilder()
+    .setColor(snapshot.paused ? COLORS.paused : COLORS.playing)
+    .setAuthor({ name: snapshot.paused ? "Wstrzymano" : radio ? "Radio 24/7" : "Teraz gra" })
+    .setTitle(escapeAndTruncate(current.title, TITLE_LIMIT));
+
+  const url = safeHttpUrl(current.webpageUrl ?? current.url);
+  if (url) embed.setURL(url);
+  const thumbnail = safeHttpUrl(current.thumbnail);
+  if (thumbnail) embed.setThumbnail(thumbnail);
+
+  const description: string[] = [];
+  if (current.artist) description.push(escapeAndTruncate(current.artist, ARTIST_LIMIT));
+  if (duration) description.push(progressBar(position, duration));
+  if (description.length > 0) embed.setDescription(description.join("\n"));
+
+  const time = live ? "Na żywo" : duration ? `${formatTime(position)} / ${formatTime(duration)}` : formatTime(position);
+  const upcoming = snapshot.next ? escapeAndTruncate(snapshot.next.title, NEXT_LIMIT) : "Kolejka jest pusta";
+  const more = snapshot.next && snapshot.queueTotal > 1 ? ` (+${snapshot.queueTotal - 1} więcej)` : "";
+  embed.addFields(
+    { name: "Czas", value: time, inline: true },
+    { name: "Głośność", value: `${Math.round(snapshot.settings.volume * 100)}%`, inline: true },
+    { name: "Powtarzanie", value: radio ? "Radio" : LOOP_LABELS[snapshot.loop], inline: true },
+    { name: "Następny", value: `${upcoming}${more}`, inline: false }
+  );
+
+  const footer = [
+    current.requestedBy ? `Dodał ${truncate(current.requestedBy, 32)}` : undefined,
+    SOURCE_LABELS[current.source]
+  ].filter(Boolean);
+  if (footer.length > 0) embed.setFooter({ text: footer.join(" · ") });
   return embed;
+}
+
+function idleEmbed(snapshot: QueueSnapshot) {
+  const last = snapshot.history[0];
+  const heading = !last ? "Nic teraz nie gra" : snapshot.connected ? "Kolejka zakończona" : "Rozłączono";
+  const lines: string[] = [];
+  if (last) lines.push(`Ostatnio grało: ${formatTrackLine(last, 160)}`);
+  lines.push(
+    snapshot.connected && !snapshot.settings.stayInChannel
+      ? "Dodaj coś przez `/play`. Rozłączę się po 3 minutach bezczynności."
+      : "Dodaj coś przez `/play`."
+  );
+  return new EmbedBuilder().setColor(COLORS.idle).setAuthor({ name: heading }).setDescription(lines.join("\n"));
 }
 
 export function queueEmbed(snapshot: QueueSnapshot, requestedPage: number) {
@@ -89,21 +139,44 @@ export function queuePageButtons(page: number, pageCount: number) {
 }
 
 export function nowPlayingComponents(snapshot: QueueSnapshot) {
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("music:toggle")
-      .setLabel(snapshot.paused ? "Wznów" : "Pauza")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("music:skip").setLabel("Pomiń").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("music:shuffle").setLabel("Losuj kolejkę").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("music:loop").setLabel("Powtórz kolejkę").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("music:stop").setLabel("Stop").setStyle(ButtonStyle.Danger)
+  const active = Boolean(snapshot.current);
+  const radio = isRadioPlaying(snapshot);
+  const volume = snapshot.settings.volume;
+  const button = (id: string, emoji: string, style: ButtonStyle, disabled: boolean) =>
+    new ButtonBuilder().setCustomId(id).setEmoji(emoji).setStyle(style).setDisabled(disabled);
+
+  const transport = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    button("music:previous", "⏮️", ButtonStyle.Secondary, !active || radio || snapshot.history.length === 0),
+    button("music:toggle", snapshot.paused ? "▶️" : "⏸️", ButtonStyle.Primary, !active),
+    button("music:skip", "⏭️", ButtonStyle.Secondary, !active),
+    button("music:stop", "⏹️", ButtonStyle.Danger, !active)
   );
-  return [row];
+  const options = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    button("music:shuffle", "🔀", ButtonStyle.Secondary, !active || radio || snapshot.queueTotal < 2),
+    button(
+      "music:loop",
+      snapshot.loop === "track" ? "🔂" : "🔁",
+      snapshot.loop !== "none" && !radio ? ButtonStyle.Success : ButtonStyle.Secondary,
+      !active || radio
+    ),
+    button("music:voldown", "🔉", ButtonStyle.Secondary, !active || volume <= 0.01),
+    button("music:volup", "🔊", ButtonStyle.Secondary, !active || volume >= 1)
+  );
+  return [transport, options];
 }
 
-function progressBar(position: number, duration: number) {
-  const steps = 18;
-  const active = Math.min(steps, Math.max(0, Math.floor((position / duration) * steps)));
-  return `${"━".repeat(active)}●${"─".repeat(steps - active)}`;
+export function progressBar(position: number, duration: number, cells = PROGRESS_CELLS) {
+  const ratio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
+  const filled = Math.round(ratio * cells);
+  return `${"▰".repeat(filled)}${"▱".repeat(cells - filled)}`;
+}
+
+function safeHttpUrl(value?: string) {
+  if (!value || value.length > 2_048) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -10,6 +10,12 @@ export function escapeAndTruncate(value: string, maxLength: number) {
   return `${escaped.slice(0, maxLength - ELLIPSIS.length)}${ELLIPSIS}`;
 }
 
+export function truncate(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  if (maxLength <= ELLIPSIS.length) return ELLIPSIS.slice(0, maxLength);
+  return `${value.slice(0, maxLength - ELLIPSIS.length)}${ELLIPSIS}`;
+}
+
 export function formatTrackLine(track: Track, maxLength = 90) {
   const live = track.isLive ? " [LIVE]" : "";
   const fixedLength = 4 + live.length; // **title** and the optional live suffix

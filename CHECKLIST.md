@@ -55,11 +55,20 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 - [ ] `connect()`: ustawiać `voiceChannel` i `textChannelId` dopiero po sprawdzeniu uprawnień
 - [ ] Walidować ID playlisty Spotify (`^[A-Za-z0-9]{22}$`) i kodować je w URL
 - [ ] `setMaxLength` w opcjach tekstowych (nazwa radia ok. 100, `query` i `url` ok. 500)
-- [ ] Serializować ogłoszenia „Teraz gra" per serwer (bez duplikatów)
+- [x] Serializować ogłoszenia „Teraz gra" per serwer (bez duplikatów) – zrobione w UI-1
 - [ ] `/lyrics`: czyścić tytuł i autora (Official Video, „- Topic", VEVO), zapasowe `/api/search`, usuwać znaczniki czasu z wersji „synced"
 - [ ] `setContexts(Guild)` dla komend (bez działania w DM)
 - [ ] Zdeduplikować odświeżanie tokenu Spotify; `SkipVoteTracker` bez głosów osób, które wyszły z kanału
 - [ ] Czyścić zapisany stan dla niedostępnych kanałów; `restoreSavedPlayback` nie powinno blokować `/play` do końca przywracania
+
+### Wygląd (UI)
+
+- [x] **UI-1. Nowy wygląd wiadomości „Teraz gra"**
+  - Tytuł jako link, artysta w osobnej linii, krótki pasek postępu (12 pól) odświeżany co 30 s, pola Czas / Głośność / Powtarzanie / Następny, stopka (kto dodał, źródło).
+  - Kolor zależny od stanu (gra, pauza, koniec), stan końcowy „Kolejka zakończona" / „Rozłączono" z wyłączonymi przyciskami.
+  - Dwa rzędy po 4 przyciski z ikonami: ⏮ ⏯ ⏭ ⏹ oraz 🔀 🔁/🔂 🔉 🔊 (dochodzą „poprzedni" i głośność ±10%; pętla przełącza wyłączona → kolejka → utwór).
+  - Odświeżanie przy pauzie, wznowieniu, głośności, pętli, zmianie kolejki i `/seek` (debounce ok. 1,2 s), edycje serializowane per serwer.
+  - Test: `tests/nowPlaying.test.ts`, `tests/nowPlayingPublisher.test.ts`.
 
 ### Kod, testy i dokumentacja
 

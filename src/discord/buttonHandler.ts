@@ -4,8 +4,8 @@ import { CooldownManager } from "./CooldownManager.js";
 import { assertCanControlPlayback } from "./voiceGuard.js";
 import { requestSkip, skipVoteMessage } from "./commands/playbackControl.js";
 import {
-  nowPlayingComponents,
-  nowPlayingEmbed,
+  isRadioPlaying,
+  nowPlayingPayload,
   queueEmbed,
   queuePageButtons,
   queuePageCount
@@ -13,6 +13,7 @@ import {
 
 const componentCooldowns = new CooldownManager();
 const queuePaginationCooldowns = new CooldownManager();
+const VOLUME_STEP = 0.1;
 
 export async function handleButton(interaction: ButtonInteraction, players: PlayerManager) {
   if (!interaction.guildId) return;
@@ -61,9 +62,28 @@ export async function handleButton(interaction: ButtonInteraction, players: Play
     case "music:shuffle":
       session.shuffle();
       break;
-    case "music:loop":
-      session.setLoop(session.snapshot().loop === "queue" ? "none" : "queue");
+    case "music:previous":
+      await session.playPrevious();
       break;
+    case "music:loop": {
+      const current = session.snapshot();
+      if (isRadioPlaying(current)) {
+        await interaction.reply({
+          content: "Przy radiu powtarzanie jest zawsze włączone.",
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
+      session.setLoop(current.loop === "none" ? "queue" : current.loop === "queue" ? "track" : "none");
+      break;
+    }
+    case "music:voldown":
+    case "music:volup": {
+      const delta = interaction.customId === "music:volup" ? VOLUME_STEP : -VOLUME_STEP;
+      const volume = session.snapshot().settings.volume;
+      session.setSettings({ volume: Math.min(1, Math.max(0.01, Math.round((volume + delta) * 100) / 100)) });
+      break;
+    }
     case "music:stop":
       session.clearQueue();
       session.skip();
@@ -72,5 +92,5 @@ export async function handleButton(interaction: ButtonInteraction, players: Play
       return;
   }
   const snapshot = session.snapshot();
-  await interaction.update({ embeds: [nowPlayingEmbed(snapshot)], components: nowPlayingComponents(snapshot) });
+  await interaction.update(nowPlayingPayload(snapshot));
 }
