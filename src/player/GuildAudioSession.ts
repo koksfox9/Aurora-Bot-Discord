@@ -14,7 +14,6 @@ import { logger } from "../logger.js";
 import { assertSafePlaybackInput, assertSafeRadioUrl } from "../sources/MediaInputGuard.js";
 import { getYouTubePlaylistId, loadYouTubePlaylistVideoIds } from "../sources/YouTubePlaylistClient.js";
 import { availableQueueCapacity } from "./queueCapacity.js";
-import { SkipVoteTracker } from "./SkipVoteTracker.js";
 import { isDuplicateFailureSkip, shouldSkipActiveTrack } from "./failureSkip.js";
 
 type Requester = { id: string; username: string };
@@ -34,7 +33,6 @@ export class GuildAudioSession extends EventEmitter {
   private autoplayGeneration = 0;
   private autoplayTask?: Promise<void>;
   private autoplayRetryTimer?: NodeJS.Timeout;
-  private readonly skipVotes = new SkipVoteTracker();
   private readonly settings: PlaybackSettings;
   private idleTimer?: NodeJS.Timeout;
   private connectTask?: Promise<void>;
@@ -369,7 +367,6 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   clearQueue() {
-    this.clearSkipVotes();
     this.player?.queue.clear();
     this.radio = undefined;
     this.player?.setLoop("none");
@@ -449,24 +446,12 @@ export class GuildAudioSession extends EventEmitter {
   skip() {
     const player = this.player;
     if (!player?.queue.current) return false;
-    this.clearSkipVotes();
     if (player.loop === "track" && !this.radio) {
       player.setLoop("none");
       this.restoreTrackLoopAfterSkip = true;
     }
     player.skip();
     return true;
-  }
-
-  castSkipVote(userId: string, requiredVotes: number) {
-    const current = this.player?.queue.current;
-    if (!current) return { status: "empty" as const, votes: 0, required: requiredVotes };
-    const trackId = `${current.identifier}:${current.length}:${current.title}`;
-    const result = this.skipVotes.cast(trackId, userId, requiredVotes);
-    if (result.status === "skipped") {
-      this.skip();
-    }
-    return result;
   }
 
   pause() {
@@ -592,7 +577,6 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   onTrackStart(track: KazagumoTrack) {
-    this.clearSkipVotes();
     this.clearIdleTimer();
     if (this.restoreTrackLoopAfterSkip && !this.radio) {
       this.player?.setLoop("track");
@@ -604,7 +588,6 @@ export class GuildAudioSession extends EventEmitter {
   }
 
   onTrackEnd() {
-    this.clearSkipVotes();
     if (this.current && this.current.id !== this.radio?.id) {
       this.history.push(this.current);
       if (this.history.length > 50) this.history.shift();
@@ -822,10 +805,6 @@ export class GuildAudioSession extends EventEmitter {
   private clearIdleTimer() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = undefined;
-  }
-
-  private clearSkipVotes() {
-    this.skipVotes.clear();
   }
 
   private requirePlayer() {

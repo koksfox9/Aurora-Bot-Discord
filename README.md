@@ -62,8 +62,8 @@ The current Compose setup runs one Lavalink node, so failover cannot be verified
 - `/spotify-login`, `/spotify-playlists`, `/spotify-playlist value:<id albo link>`
 - `/radio url:<stream> name:<nazwa>` (Premium)
 - `/queue page:<numer>` with page buttons, `/nowplaying`
-- `/pause`, `/resume`, `/skip` (głosowanie większości; jedna osoba pomija od razu), `/skipto`, `/previous`, `/remove`, `/move`, `/clear`, `/stop`, `/shuffle`, `/loop`, `/seek`, `/volume`, `/autoplay` (dobiera kolejny utwór na podstawie ostatniego wykonawcy), `/lyrics` (tekst z LRCLIB; wysyła tytuł, wykonawcę i czas trwania utworu)
-- `/djrole role:<rola>` sets the DJ role (Manage Server required); omit `role` to disable it. DJ role members can control playback and skip without a vote. The role is stored in `data/guild-settings.json`.
+- `/pause`, `/resume`, `/skip` (pomija od razu), `/skipto`, `/previous`, `/remove`, `/move`, `/clear`, `/stop`, `/shuffle`, `/loop`, `/seek`, `/volume`, `/autoplay` (dobiera kolejny utwór na podstawie ostatniego wykonawcy), `/lyrics` (tekst z LRCLIB; wysyła tytuł, wykonawcę i czas trwania utworu)
+- `/djrole role:<rola>` sets the DJ role (Manage Server required); omit `role` to disable it. DJ role members can control playback. The role is stored in `data/guild-settings.json`.
 - `/defaultvolume value:<1-100>` sets the server's default playback volume (Manage Server required). It updates the active session too and applies to later sessions; `/volume` remains a temporary per-session adjustment.
 - `/musictextchannel channel:<kanał>` sets the server's “Teraz gra” announcement channel (Manage Server required); omit `channel` to disable it. The bot checks that it can view and send messages there. This setting also overrides the text channel used when connecting or restoring playback.
 - `/music24channel channel:<kanał głosowy>` sets the server's default voice channel for 24/7 mode (Manage Server required); omit `channel` to disable it. The bot checks Connect and Speak permissions. It takes effect the next time `/mode24h enabled:true` is used.

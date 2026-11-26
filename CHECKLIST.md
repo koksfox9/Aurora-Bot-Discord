@@ -39,9 +39,9 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 - [x] **P8. Błędy walidacji w panelu jako 500** [z kodu]
   - Klasa błędu z kodem 400 i bezpieczną treścią; 500 tylko dla prawdziwych awarii.
   - Walidacja obejmuje pola panelu, dozwolone wartości, JSON body oraz bezpieczne linki; testy rozróżniają odpowiedzi 400 i 500.
-- [ ] **P9. `playerClosed` pomija bieżący utwór, także przy odzyskiwalnych zamknięciach** [z kodu]
-  - Nie pomijać utworu przy odzyskiwalnych kodach; tylko logować i informować.
-  - Wymaga testu na żywo (zmiana serwera głosowego).
+- [x] **P9. `playerClosed` pomija bieżący utwór, także przy odzyskiwalnych zamknięciach** [z kodu]
+  - Normalne i odzyskiwalne zamknięcia połączenia głosowego nie pomijają utworu; bot zapisuje ostrzeżenie i informuje o ponownym łączeniu.
+  - Testy obejmują klasyfikację kodów; na serwerze należy jeszcze sprawdzić ręczne przeniesienie bota między kanałami.
 - [ ] **P10. Zamykanie bez limitu czasu** [z kodu]
   - Limit 8–10 s na oczekiwanie w `players.shutdown()` i watchdog `process.exit(1)` w `index.ts`.
 - [ ] **P11. Pluginy Lavalinka nie są trwałe** [z kodu]
@@ -58,7 +58,7 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 - [x] Serializować ogłoszenia „Teraz gra" per serwer (bez duplikatów) – zrobione w UI-1
 - [ ] `/lyrics`: czyścić tytuł i autora (Official Video, „- Topic", VEVO), zapasowe `/api/search`, usuwać znaczniki czasu z wersji „synced"
 - [ ] `setContexts(Guild)` dla komend (bez działania w DM)
-- [ ] Zdeduplikować odświeżanie tokenu Spotify; `SkipVoteTracker` bez głosów osób, które wyszły z kanału
+- [ ] Zdeduplikować odświeżanie tokenu Spotify
 - [ ] Czyścić zapisany stan dla niedostępnych kanałów; `restoreSavedPlayback` nie powinno blokować `/play` do końca przywracania
 
 ### Wygląd (UI)

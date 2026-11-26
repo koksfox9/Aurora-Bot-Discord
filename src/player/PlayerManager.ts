@@ -7,6 +7,7 @@ import { logger } from "../logger.js";
 import { AutocompleteSearchCache } from "../discord/AutocompleteSearchCache.js";
 import { readJsonFile, writeJsonFileAtomic } from "../utils/fs.js";
 import { GuildAudioSession } from "./GuildAudioSession.js";
+import { isRecoverablePlayerClose } from "./playerClosed.js";
 
 interface MediaRequestQueue {
   tail: Promise<void>;
@@ -502,9 +503,19 @@ export class PlayerManager extends EventEmitter {
       this.sessions.get(player.guildId)?.onPlayerFailure(`Lavalink: ${detail}`, undefined, true);
     });
     this.kazagumo.on("playerClosed", (player, data) => {
-      this.sessions
-        .get(player.guildId)
-        ?.onPlayerFailure(`Połączenie Lavalink zamknięte (${data.code}): ${data.reason}`, undefined, true);
+      const session = this.sessions.get(player.guildId);
+      const message = `Połączenie głosowe Lavalink zamknięte (${data.code}): ${data.reason}`;
+      if (isRecoverablePlayerClose(data)) {
+        logger.warn("Voice connection closed and is expected to recover", {
+          guildId: player.guildId,
+          code: data.code,
+          reason: data.reason,
+          byRemote: data.byRemote
+        });
+        session?.onPlayerFailure(`${message}. Próba ponownego połączenia trwa.`, undefined, false);
+        return;
+      }
+      session?.onPlayerFailure(message, undefined, true);
     });
   }
 }

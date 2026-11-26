@@ -95,7 +95,7 @@ async function handleCommand(interaction: ChatInputCommandInteraction, players: 
   if (await handleMediaCommand(interaction, players, spotify, guildId, djRoleId, requester)) return;
   if (await handlePlaybackSettingsCommand(interaction, players, guildId, requester.id)) return;
   if (await handleQueueManagementCommand(interaction, players, guildId)) return;
-  if (await handlePlaybackControlCommand(interaction, players, guildId, djRoleId)) return;
+  if (await handlePlaybackControlCommand(interaction, players, guildId)) return;
   if (await handleLyricsCommand(interaction, players, guildId)) return;
   if (await handleHelpCommand(interaction)) return;
   if (await handleQueueViewCommand(interaction, players, guildId)) return;
