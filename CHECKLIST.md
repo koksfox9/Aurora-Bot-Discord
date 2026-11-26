@@ -45,8 +45,8 @@ P1 → P2 → P3 → P4 + P5 → P6 → P7 → P8 → P10–P12 → P9 (po teśc
 - [x] **P10. Zamykanie bez limitu czasu** [z kodu]
   - `players.shutdown()` ma limit 10 s; watchdog procesu kończy zamykanie kodem 1 po 20 s.
   - Test obejmuje poprawne zakończenie oraz przekroczenie limitu czasu.
-- [ ] **P11. Pluginy Lavalinka nie są trwałe** [z kodu]
-  - Wolumin na `/opt/Lavalink/plugins` w `compose.yaml`.
+- [x] **P11. Pluginy Lavalinka nie są trwałe** [z kodu]
+  - Wolumin `lavalink-plugins` jest montowany pod `/opt/Lavalink/plugins` w `compose.yaml`.
 - [ ] **P12. Po 120 nieudanych próbach Lavalink nie wraca** [z kodu]
   - Po ostatnim `disconnect` zakończyć proces (`exit(1)`) albo dodać węzeł od nowa.
 

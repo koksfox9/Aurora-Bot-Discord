@@ -44,7 +44,7 @@ pnpm lavalink:logs
 pnpm start
 ```
 
-The Lavalink REST/WebSocket node is private on `127.0.0.1:2333`; the panel defaults to `http://127.0.0.1:3100`. `pnpm lavalink:logs` can be used in a second terminal to inspect plugin startup and source errors.
+The Lavalink REST/WebSocket node is private on `127.0.0.1:2333`; the panel defaults to `http://127.0.0.1:3100`. `pnpm lavalink:logs` can be used in a second terminal to inspect plugin startup and source errors. Plugin JAR files are stored in the named `lavalink-plugins` volume, so Docker container recreation does not download them again.
 
 After changing slash command definitions, run `pnpm build` and then `pnpm deploy:commands`. Restarting the bot no longer registers Discord commands automatically.
 
