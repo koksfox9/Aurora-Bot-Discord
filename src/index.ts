@@ -9,6 +9,8 @@ import { SpotifyClient } from "./sources/SpotifyClient.js";
 import { ensureDir } from "./utils/fs.js";
 import { startWebServer } from "./web/server.js";
 
+const SHUTDOWN_WATCHDOG_MS = 20_000;
+
 process.on("unhandledRejection", (reason) => {
   logger.error("unhandled promise rejection", {
     error: reason instanceof Error ? reason.message : String(reason)
@@ -133,6 +135,11 @@ async function main() {
     if (!shutdownPromise) {
       shutdownPromise = (async () => {
         logger.info("shutting down", { signal });
+        const watchdog = setTimeout(() => {
+          logger.error("shutdown watchdog timed out; terminating process", { timeoutMs: SHUTDOWN_WATCHDOG_MS });
+          process.exit(1);
+        }, SHUTDOWN_WATCHDOG_MS);
+        watchdog.unref();
         clearInterval(nodeRecoveryInterval);
         let failed = false;
         const runStep = async (name: string, action: () => Promise<unknown> | void | undefined) => {
@@ -156,6 +163,7 @@ async function main() {
 
         const exitCode = failed ? 1 : 0;
         logger.info("shutdown complete", { exitCode });
+        clearTimeout(watchdog);
         process.exit(exitCode);
       })();
     }

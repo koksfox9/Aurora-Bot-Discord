@@ -6,8 +6,11 @@ import type { PersistedGuildPlaybackState, PlaybackEvent, QueueSnapshot } from "
 import { logger } from "../logger.js";
 import { AutocompleteSearchCache } from "../discord/AutocompleteSearchCache.js";
 import { readJsonFile, writeJsonFileAtomic } from "../utils/fs.js";
+import { withTimeout } from "../utils/timeout.js";
 import { GuildAudioSession } from "./GuildAudioSession.js";
 import { isRecoverablePlayerClose } from "./playerClosed.js";
+
+const PLAYER_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 interface MediaRequestQueue {
   tail: Promise<void>;
@@ -283,6 +286,10 @@ export class PlayerManager extends EventEmitter {
 
   async shutdown() {
     this.shuttingDown = true;
+    await withTimeout(this.shutdownPlayers(), PLAYER_SHUTDOWN_TIMEOUT_MS, "Lavalink player shutdown");
+  }
+
+  private async shutdownPlayers() {
     await this.restoreTask?.catch(() => undefined);
     await Promise.all([...this.mediaRequestQueues.values()].map((queue) => queue.tail));
     await this.persistPlaybackState();
